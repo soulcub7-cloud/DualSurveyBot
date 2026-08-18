@@ -242,7 +242,13 @@ async def callback_open_survey(callback: CallbackQuery):
             surveys.average,
             surveys.best,
             surveys.improve,
-            surveys.recommendation
+            surveys.recommendation,
+            COALESCE(
+                surveys.enterprise,
+                students.enterprise,
+                'Не указано'
+            ),
+            students.stream
         FROM surveys
         JOIN students
             ON students.id = surveys.student_id
@@ -267,6 +273,8 @@ async def callback_open_survey(callback: CallbackQuery):
     text = (
         f"<b>Анкета №{survey_id}</b>\n\n"
         f"👨‍🎓 <b>Студент:</b> {survey[0]}\n"
+        f"👥 <b>Поток:</b> {survey[8]}\n"
+        f"🏭 <b>Предприятие:</b> {survey[7]}\n"
         f"👨‍🏭 <b>Наставник:</b> {survey[1]}\n"
         f"📅 <b>Дата:</b> {survey[2]}\n"
         f"⭐ <b>Средний балл:</b> {survey[3]}\n\n"

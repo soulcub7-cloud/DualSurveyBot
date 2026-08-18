@@ -5,7 +5,7 @@ from aiogram.types import (
     InlineKeyboardButton
 )
 
-from database import get_students
+from database import get_streams, get_students_by_stream
 
 
 # ============================
@@ -42,12 +42,32 @@ def main_menu_builder(telegram_id):
 
 
 # ============================
+# ВЫБОР ПОТОКА
+# ============================
+
+def streams_keyboard():
+
+    keyboard = []
+
+    for stream in get_streams():
+
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"{stream} поток",
+                callback_data=f"stream_{stream}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+# ============================
 # ВЫБОР СТУДЕНТА
 # ============================
 
-def students_keyboard():
+def students_keyboard(stream):
 
-    students = get_students()
+    students = get_students_by_stream(stream)
 
     keyboard = []
 
@@ -59,6 +79,13 @@ def students_keyboard():
                 callback_data=f"student_{student_id}"
             )
         ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            text="⬅ К выбору потока",
+            callback_data="back_streams"
+        )
+    ])
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -222,10 +249,7 @@ def confirm_delete_keyboard(survey_id):
 # ПРЕДПРИЯТИЯ
 # ==========================================
 
-from database import (
-    get_enterprises,
-    get_students_by_enterprise
-)
+from database import get_enterprises
 
 
 # ==========================================
@@ -236,47 +260,26 @@ def enterprises_keyboard():
 
     keyboard = []
 
-    for enterprise, count in get_enterprises():
+    for enterprise_id, enterprise in get_enterprises():
 
         keyboard.append([
             InlineKeyboardButton(
-                text=f"🏭 {enterprise}\n👨‍🎓 Студентов: {count}",
-                callback_data=f"enterprise_{enterprise}"
-            )
-        ])
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=keyboard
-    )
-
-
-# ==========================================
-# СТУДЕНТЫ ПРЕДПРИЯТИЯ
-# ==========================================
-
-def enterprise_students_keyboard(enterprise):
-
-    keyboard = []
-
-    students = get_students_by_enterprise(enterprise)
-
-    for student in students:
-
-        student_id = student[0]
-        fio = student[1]
-        course = student[2]
-
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"👨‍🎓 {fio} • {course} курс",
-                callback_data=f"student_{student_id}"
+                text=f"🏭 {enterprise}",
+                callback_data=f"enterprise_{enterprise_id}"
             )
         ])
 
     keyboard.append([
         InlineKeyboardButton(
-            text="⬅ Назад",
-            callback_data="choose_enterprise"
+            text="⬅ Выбрать другой поток",
+            callback_data="back_streams"
+        )
+    ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            text="⬅ Выбрать другого студента",
+            callback_data="back_students"
         )
     ])
 
@@ -295,7 +298,13 @@ def start_survey_keyboard():
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅ Выбрать другого студента",
+                    text="🏭 Выбрать другое предприятие",
+                    callback_data="back_enterprises"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👨‍🎓 Выбрать другого студента",
                     callback_data="back_students"
                 )
             ]

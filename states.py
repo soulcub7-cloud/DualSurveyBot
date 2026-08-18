@@ -7,7 +7,11 @@ class Registration(StatesGroup):
 
 class Survey(StatesGroup):
 
+    choosing_stream = State()
+
     choosing_student = State()
+
+    choosing_enterprise = State()
 
     confirm_student = State()
 

@@ -11,8 +11,8 @@ from datetime import datetime
 import json
 
 from keyboards import (
+    streams_keyboard,
     students_keyboard,
-    enterprise_students_keyboard,
     enterprises_keyboard,
     marks_keyboard,
     main_menu_builder,
@@ -24,7 +24,8 @@ from database import (
     save_survey,
     get_surveys_by_mentor,
     get_survey,
-    get_student
+    get_student,
+    get_enterprise
 )
 
 from states import Survey
@@ -50,6 +51,19 @@ def average_icon(avg):
 
     return "🔴"
 
+
+def student_confirmation_text(student, enterprise):
+
+    return (
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📝 <b>Новая анкета</b>\n\n"
+        f"👨‍🎓 <b>Студент</b>\n{student[1]}\n\n"
+        f"👥 <b>Поток</b>\n{student[5]} поток\n\n"
+        f"🏭 <b>Предприятие</b>\n{enterprise}\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Проверьте правильность выбора."
+    )
+
 # =====================================================
 # НОВАЯ АНКЕТА
 # =====================================================
@@ -58,44 +72,92 @@ def average_icon(avg):
 async def new_survey(message: Message, state: FSMContext):
 
     await state.clear()
+    await state.set_state(Survey.choosing_stream)
 
     await message.answer(
-        "🏭 Выберите предприятие:",
-        reply_markup=enterprises_keyboard()
+        "👥 Выберите поток:",
+        reply_markup=streams_keyboard()
     )
+
+
+# =====================================================
+# ВЫБОР ПОТОКА
+# =====================================================
+
+@router.callback_query(
+    Survey.choosing_stream,
+    F.data.startswith("stream_")
+)
+async def choose_stream(callback: CallbackQuery, state: FSMContext):
+
+    stream = int(callback.data.removeprefix("stream_"))
+
+    await state.update_data(stream=stream)
+    await state.set_state(Survey.choosing_student)
+
+    await callback.message.edit_text(
+        f"👥 <b>{stream} поток</b>\n\n"
+        "👨‍🎓 Выберите студента:",
+        parse_mode="HTML",
+        reply_markup=students_keyboard(stream)
+    )
+
+    await callback.answer()
 
 
 # =====================================================
 # ВЫБОР ПРЕДПРИЯТИЯ
 # =====================================================
 
-@router.callback_query(F.data.startswith("enterprise_"))
+@router.callback_query(
+    Survey.choosing_enterprise,
+    F.data.startswith("enterprise_")
+)
 async def choose_enterprise(
     callback: CallbackQuery,
     state: FSMContext
 ):
 
-    enterprise = callback.data.replace("enterprise_", "")
+    enterprise_id = int(callback.data.removeprefix("enterprise_"))
+    enterprise = get_enterprise(enterprise_id)
+    data = await state.get_data()
+    student = get_student(data["student_id"])
 
-    await state.set_state(Survey.choosing_student)
+    if not student or not enterprise:
+        await callback.answer("Данные не найдены.", show_alert=True)
+        return
+
+    await state.update_data(enterprise=enterprise)
+    await state.set_state(Survey.confirm_student)
 
     await callback.answer()
 
     await callback.message.edit_text(
-        f"🏭 Предприятие:\n<b>{enterprise}</b>\n\n"
-        "Выберите студента:",
+        student_confirmation_text(student, enterprise),
         parse_mode="HTML",
-        reply_markup=enterprise_students_keyboard(enterprise)
+        reply_markup=start_survey_keyboard()
     )
-@router.callback_query(F.data == "choose_enterprise")
+
+
+@router.callback_query(F.data == "back_enterprises")
 async def back_to_enterprises(callback: CallbackQuery, state: FSMContext):
 
-    await state.clear()
+    data = await state.get_data()
+    student = get_student(data.get("student_id"))
+
+    if not student:
+        await callback.answer("Студент не найден.", show_alert=True)
+        return
+
+    await state.set_state(Survey.choosing_enterprise)
 
     await callback.answer()
 
     await callback.message.edit_text(
+        f"👨‍🎓 Студент: <b>{student[1]}</b>\n\n"
+        f"👥 Поток: <b>{student[5]}</b>\n\n"
         "🏭 Выберите предприятие:",
+        parse_mode="HTML",
         reply_markup=enterprises_keyboard()
     )
 
@@ -155,6 +217,8 @@ async def open_survey(callback: CallbackQuery):
     text = (
         f"<b>📋 Анкета №{survey[0]}</b>\n\n"
         f"👨‍🎓 Студент: {survey[9]}\n"
+        f"👥 Поток: {survey[11]}\n"
+        f"🏭 Предприятие: {survey[10]}\n"
         f"📅 Дата: {survey[3]}\n"
         f"⭐ Средний балл: {survey[5]}\n\n"
         f"<b>Оценки:</b>\n"
@@ -251,30 +315,14 @@ async def select_student(
         student_id=student_id
     )
 
-    await state.set_state(Survey.confirm_student)
-
-    text = (
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "📝 <b>Новая анкета</b>\n\n"
-
-        f"👨‍🎓 <b>Студент</b>\n"
-        f"{student[1]}\n\n"
-
-        f"🏭 <b>Предприятие</b>\n"
-        f"{student[4]}\n\n"
-
-        f"📚 <b>Курс</b>\n"
-        f"{student[3]}\n\n"
-
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-
-        "Проверьте правильность выбранного студента."
-    )
+    await state.set_state(Survey.choosing_enterprise)
 
     await callback.message.edit_text(
-        text,
+        f"👨‍🎓 Студент: <b>{student[1]}</b>\n\n"
+        f"👥 Поток: <b>{student[5]}</b>\n\n"
+        "🏭 Выберите предприятие:",
         parse_mode="HTML",
-        reply_markup=start_survey_keyboard()
+        reply_markup=enterprises_keyboard()
     )
 
     await callback.answer()
@@ -313,28 +361,44 @@ async def start_survey(
 # ВЫБРАТЬ ДРУГОГО СТУДЕНТА
 # =====================================================
 
-@router.callback_query(
-    Survey.confirm_student,
-    F.data == "back_students"
-)
+@router.callback_query(F.data == "back_students")
 async def back_students(
     callback: CallbackQuery,
     state: FSMContext
 ):
 
     data = await state.get_data()
+    stream = data.get("stream")
 
-    student = get_student(data["student_id"])
-
-    enterprise = student[4]
+    if stream is None:
+        await state.set_state(Survey.choosing_stream)
+        await callback.message.edit_text(
+            "👥 Выберите поток:",
+            reply_markup=streams_keyboard()
+        )
+        await callback.answer()
+        return
 
     await state.set_state(Survey.choosing_student)
 
     await callback.message.edit_text(
-        f"🏭 Предприятие\n<b>{enterprise}</b>\n\n"
-        "Выберите студента:",
+        f"👥 <b>{stream} поток</b>\n\n"
+        "👨‍🎓 Выберите студента:",
         parse_mode="HTML",
-        reply_markup=enterprise_students_keyboard(enterprise)
+        reply_markup=students_keyboard(stream)
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_streams")
+async def back_streams(callback: CallbackQuery, state: FSMContext):
+
+    await state.set_state(Survey.choosing_stream)
+
+    await callback.message.edit_text(
+        "👥 Выберите поток:",
+        reply_markup=streams_keyboard()
     )
 
     await callback.answer()
@@ -410,6 +474,7 @@ async def finish(message: Message, state: FSMContext):
     save_survey(
         mentor_id=mentor_id,
         student_id=data["student_id"],
+        enterprise=data["enterprise"],
         answers=answers,
         average=average,
         best=data["best"],
@@ -431,7 +496,7 @@ async def finish(message: Message, state: FSMContext):
         f"{student[1]}\n\n"
 
         f"🏭 <b>Предприятие</b>\n"
-        f"{student[4]}\n\n"
+        f"{data['enterprise']}\n\n"
 
         f"{icon} <b>Средний балл</b>\n"
         f"{average:.2f}\n\n"

@@ -12,6 +12,7 @@ from handlers.start import router as start_router
 from handlers.registration import router as registration_router
 from handlers.survey import router as survey_router
 from handlers.specialist import router as specialist_router
+from fill_students import sync_reference_data
 
 
 # ============================
@@ -37,6 +38,11 @@ dp.include_router(specialist_router)
 # ============================
 
 async def main():
+
+    try:
+        sync_reference_data()
+    except Exception as error:
+        print(f"Не удалось синхронизировать справочники: {error}")
 
     print("=" * 50)
     print("🤖 Система анкетирования наставников")

@@ -1,7 +1,13 @@
 import sqlite3
 import json
+import os
+from pathlib import Path
 
-DATABASE = "data/survey.db"
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE = os.getenv(
+    "DATABASE_PATH",
+    str(BASE_DIR / "data" / "survey.db")
+)
 
 
 def get_connection():
@@ -34,7 +40,20 @@ def create_tables():
         fio TEXT NOT NULL,
         speciality TEXT,
         course INTEGER,
-        enterprise TEXT
+        enterprise TEXT,
+        stream INTEGER,
+        active INTEGER DEFAULT 1
+    )
+    """)
+
+    # =====================================================
+    # ПРЕДПРИЯТИЯ
+    # =====================================================
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS enterprises(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        active INTEGER DEFAULT 1
     )
     """)
 
@@ -52,6 +71,7 @@ def create_tables():
         best TEXT,
         improve TEXT,
         recommendation TEXT,
+        enterprise TEXT,
 
         FOREIGN KEY (mentor_id) REFERENCES mentors(id),
         FOREIGN KEY (student_id) REFERENCES students(id)
@@ -156,7 +176,7 @@ def get_mentor_id(telegram_id):
 # СТУДЕНТЫ
 # =====================================================
 
-def add_student(fio, speciality, course, enterprise):
+def add_student(fio, stream, speciality=None, course=None):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -183,16 +203,17 @@ def add_student(fio, speciality, course, enterprise):
             UPDATE students
 
             SET
+                stream=?,
                 speciality=?,
                 course=?,
-                enterprise=?
+                active=1
 
             WHERE fio=?
             """,
             (
+                stream,
                 speciality,
                 course,
-                enterprise,
                 fio
             )
         )
@@ -209,17 +230,18 @@ def add_student(fio, speciality, course, enterprise):
         """
         INSERT INTO students(
             fio,
+            stream,
             speciality,
             course,
-            enterprise
+            active
         )
-        VALUES(?,?,?,?)
+        VALUES(?,?,?,?,1)
         """,
         (
             fio,
+            stream,
             speciality,
-            course,
-            enterprise
+            course
         )
     )
 
@@ -237,6 +259,7 @@ def get_students():
     cursor.execute("""
         SELECT id, fio
         FROM students
+        WHERE active=1
         ORDER BY fio
     """)
 
@@ -278,6 +301,7 @@ def get_student_name(student_id):
 def save_survey(
         mentor_id,
         student_id,
+        enterprise,
         answers,
         average,
         best,
@@ -300,11 +324,12 @@ def save_survey(
             average,
             best,
             improve,
-            recommendation
+            recommendation,
+            enterprise
 
         )
 
-        VALUES(?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?)
 
         """,
         (
@@ -315,7 +340,8 @@ def save_survey(
             average,
             best,
             improve,
-            recommendation
+            recommendation,
+            enterprise
         )
     )
 
@@ -358,8 +384,22 @@ def get_survey(survey_id):
 
     cursor.execute("""
         SELECT
-            surveys.*,
-            students.fio
+            surveys.id,
+            surveys.mentor_id,
+            surveys.student_id,
+            surveys.survey_date,
+            surveys.answers,
+            surveys.average,
+            surveys.best,
+            surveys.improve,
+            surveys.recommendation,
+            students.fio,
+            COALESCE(
+                surveys.enterprise,
+                students.enterprise,
+                'Не указано'
+            ),
+            students.stream
 
         FROM surveys
 
@@ -439,13 +479,74 @@ def migrate():
     except sqlite3.OperationalError:
         pass
 
+    try:
+        cursor.execute("""
+            ALTER TABLE surveys
+            ADD COLUMN enterprise TEXT
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("""
+            ALTER TABLE students
+            ADD COLUMN stream INTEGER
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("""
+            ALTER TABLE students
+            ADD COLUMN active INTEGER DEFAULT 1
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("""
+            ALTER TABLE enterprises
+            ADD COLUMN active INTEGER DEFAULT 1
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    cursor.execute("UPDATE students SET active=1 WHERE active IS NULL")
+    cursor.execute("UPDATE enterprises SET active=1 WHERE active IS NULL")
+
+    cursor.execute("""
+        UPDATE surveys
+        SET enterprise = (
+            SELECT students.enterprise
+            FROM students
+            WHERE students.id = surveys.student_id
+        )
+        WHERE enterprise IS NULL
+    """)
+
+    cursor.execute("""
+        INSERT OR IGNORE INTO enterprises(name)
+        SELECT DISTINCT TRIM(enterprise)
+        FROM students
+        WHERE enterprise IS NOT NULL
+          AND TRIM(enterprise) != ''
+    """)
+
+    cursor.execute("""
+        INSERT OR IGNORE INTO enterprises(name)
+        SELECT DISTINCT TRIM(enterprise)
+        FROM surveys
+        WHERE enterprise IS NOT NULL
+          AND TRIM(enterprise) != ''
+    """)
+
     conn.commit()
     conn.close()
 
 
 create_tables()
 migrate()
-from config import SPECIALIST_ID
+SPECIALIST_ID = int(os.getenv("SPECIALIST_ID", "0"))
 
 def get_mentor_role(telegram_id):
     if telegram_id == SPECIALIST_ID:
@@ -464,7 +565,11 @@ def get_all_surveys_for_excel():
             students.fio,
             students.speciality,
             students.course,
-            students.enterprise,
+            COALESCE(
+                surveys.enterprise,
+                students.enterprise,
+                'Не указано'
+            ),
 
             mentors.fio,
 
@@ -558,6 +663,8 @@ def get_students_statistics():
         LEFT JOIN surveys
             ON surveys.student_id = students.id
 
+        WHERE students.active=1
+
         GROUP BY students.id
 
         ORDER BY students.fio
@@ -612,7 +719,7 @@ def get_statistics():
     cursor = conn.cursor()
 
     # Студенты
-    cursor.execute("SELECT COUNT(*) FROM students")
+    cursor.execute("SELECT COUNT(*) FROM students WHERE active=1")
     students = cursor.fetchone()[0]
 
     # Наставники
@@ -664,7 +771,11 @@ def get_survey_by_id(survey_id):
             students.fio,
             students.speciality,
             students.course,
-            students.enterprise,
+            COALESCE(
+                surveys.enterprise,
+                students.enterprise,
+                'Не указано'
+            ),
 
             mentors.fio,
 
@@ -745,15 +856,10 @@ def get_enterprises():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT
-            enterprise,
-            COUNT(*)
-
-        FROM students
-
-        GROUP BY enterprise
-
-        ORDER BY enterprise
+        SELECT id, name
+        FROM enterprises
+        WHERE active=1
+        ORDER BY name
     """)
 
     enterprises = cursor.fetchall()
@@ -763,28 +869,102 @@ def get_enterprises():
     return enterprises
 
 
+def get_enterprise(enterprise_id):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT name FROM enterprises WHERE id=?",
+        (enterprise_id,)
+    )
+
+    row = cursor.fetchone()
+    conn.close()
+
+    return row[0] if row else None
+
+
+def add_enterprise(name):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO enterprises(name, active)
+        VALUES(?, 1)
+        ON CONFLICT(name) DO UPDATE SET active=1
+        """,
+        (name,)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def deactivate_missing_enterprises(actual_enterprises):
+
+    if not actual_enterprises:
+        return 0
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    placeholders = ",".join(["?"] * len(actual_enterprises))
+
+    cursor.execute(
+        f"""
+        UPDATE enterprises
+        SET active=0
+        WHERE name NOT IN ({placeholders})
+          AND active=1
+        """,
+        actual_enterprises
+    )
+
+    changed = cursor.rowcount
+    conn.commit()
+    conn.close()
+
+    return changed
+
+
 # =====================================================
-# СТУДЕНТЫ ПО ПРЕДПРИЯТИЮ
+# СТУДЕНТЫ ПО ПОТОКУ
 # =====================================================
 
-def get_students_by_enterprise(enterprise):
+def get_streams():
 
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-    SELECT
-        id,
-        fio,
-        course,
-        speciality
+        SELECT DISTINCT stream
+        FROM students
+        WHERE active=1
+          AND stream IS NOT NULL
+        ORDER BY stream
+    """)
 
-    FROM students
+    streams = [row[0] for row in cursor.fetchall()]
 
-    WHERE enterprise=?
+    conn.close()
 
-    ORDER BY fio
-""", (enterprise,))
+    return streams
+
+
+def get_students_by_stream(stream):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, fio
+        FROM students
+        WHERE active=1
+          AND stream=?
+        ORDER BY fio
+    """, (stream,))
 
     students = cursor.fetchall()
 
@@ -792,36 +972,35 @@ def get_students_by_enterprise(enterprise):
 
     return students
 # =====================================================
-# УДАЛЕНИЕ СТУДЕНТОВ, ОТСУТСТВУЮЩИХ В EXCEL
+# СКРЫТИЕ СТУДЕНТОВ, ОТСУТСТВУЮЩИХ В EXCEL
 # =====================================================
 
-def delete_missing_students(actual_students):
+def deactivate_missing_students(actual_students):
+
+    if not actual_students:
+        return 0
 
     conn = get_connection()
     cursor = conn.cursor()
 
     placeholders = ",".join(["?"] * len(actual_students))
 
-    if actual_students:
+    cursor.execute(
+        f"""
+        UPDATE students
+        SET active=0
+        WHERE fio NOT IN ({placeholders})
+          AND active=1
+        """,
+        actual_students
+    )
 
-        cursor.execute(
-            f"""
-            DELETE FROM students
-            WHERE fio NOT IN ({placeholders})
-            """,
-            actual_students
-        )
-
-    else:
-
-        cursor.execute("DELETE FROM students")
-
-    deleted = cursor.rowcount
+    deactivated = cursor.rowcount
 
     conn.commit()
     conn.close()
 
-    return deleted
+    return deactivated
 def get_student(student_id):
 
     conn = get_connection()
@@ -833,7 +1012,8 @@ def get_student(student_id):
             fio,
             speciality,
             course,
-            enterprise
+            enterprise,
+            stream
 
         FROM students
 
@@ -855,7 +1035,7 @@ def get_statistics():
     cursor = conn.cursor()
 
     # количество студентов
-    cursor.execute("SELECT COUNT(*) FROM students")
+    cursor.execute("SELECT COUNT(*) FROM students WHERE active=1")
     students = cursor.fetchone()[0]
 
     # количество наставников
