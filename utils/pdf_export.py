@@ -1,7 +1,7 @@
 import json
 import os
 
-from questions import QUESTIONS
+from questions import QUESTIONS, OPEN_QUESTIONS
 
 from reportlab.lib import colors
 from reportlab.lib.colors import HexColor
@@ -430,24 +430,17 @@ def export_one_pdf(data):
     # --------------------------------------------------
 
     story.append(
-        Paragraph(
-            "КОММЕНТАРИИ НАСТАВНИКА",
-            HEADING_STYLE
-        )
+    comment_block(
+        OPEN_QUESTIONS[0],
+        data[9]
     )
-
-    story.append(
-        comment_block(
-            "Лучшие качества студента",
-            data[9]
-        )
-    )
+)
 
     story.append(Spacer(1, 8))
 
     story.append(
         comment_block(
-            "Что необходимо улучшить",
+            OPEN_QUESTIONS[1],
             data[10]
         )
     )
@@ -456,7 +449,7 @@ def export_one_pdf(data):
 
     story.append(
         comment_block(
-            "Рекомендации наставника",
+            OPEN_QUESTIONS[2],
             data[11]
         )
     )

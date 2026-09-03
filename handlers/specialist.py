@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile
-
+from questions import OPEN_QUESTIONS
 from database import get_survey_by_id
 from database import get_statistics
 from utils.excel_one_survey import export_one_survey
@@ -278,9 +278,9 @@ async def callback_open_survey(callback: CallbackQuery):
         f"👨‍🏭 <b>Наставник:</b> {survey[1]}\n"
         f"📅 <b>Дата:</b> {survey[2]}\n"
         f"⭐ <b>Средний балл:</b> {survey[3]}\n\n"
-        f"✅ <b>Лучше всего:</b>\n{survey[4]}\n\n"
-        f"📈 <b>Необходимо улучшить:</b>\n{survey[5]}\n\n"
-        f"💬 <b>Рекомендации:</b>\n{survey[6]}"
+        f"✅ <b>{OPEN_QUESTIONS[0]}</b>\n{survey[4]}\n\n"
+        f"📈 <b>{OPEN_QUESTIONS[1]}</b>\n{survey[5]}\n\n"
+        f"💬 <b>{OPEN_QUESTIONS[2]}</b>\n{survey[6]}"
     )
 
     await callback.message.edit_text(

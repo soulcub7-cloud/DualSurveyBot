@@ -1,6 +1,6 @@
 import json
 
-from questions import QUESTIONS
+from questions import QUESTIONS, OPEN_QUESTIONS
 
 from openpyxl import Workbook
 
@@ -88,12 +88,9 @@ def export_surveys_to_excel(data):
     headers.extend([
 
         "Средний балл",
-
-        "Лучшие качества",
-
-        "Что необходимо улучшить",
-
-        "Рекомендации"
+        OPEN_QUESTIONS[0],
+        OPEN_QUESTIONS[1],
+        OPEN_QUESTIONS[2]
 
     ])
 

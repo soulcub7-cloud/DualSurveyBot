@@ -29,7 +29,7 @@ from database import (
 )
 
 from states import Survey
-from questions import QUESTIONS
+from questions import QUESTIONS, OPEN_QUESTIONS
 
 from utils.survey_manager import (
     get_question,
@@ -425,7 +425,7 @@ async def next_question(callback: CallbackQuery, state: FSMContext):
 
     if question >= len(QUESTIONS):
 
-        await callback.message.edit_text("✍️ Что студент сделал лучше всего?")
+        await callback.message.edit_text(f"✍️ {OPEN_QUESTIONS[0]}")
         await state.set_state(Survey.best)
         await callback.answer()
         return
@@ -446,14 +446,14 @@ async def next_question(callback: CallbackQuery, state: FSMContext):
 @router.message(Survey.best)
 async def best(message: Message, state: FSMContext):
     await state.update_data(best=message.text)
-    await message.answer("✍️ Что нужно улучшить?")
+    await message.answer(f"✍️ {OPEN_QUESTIONS[1]}")
     await state.set_state(Survey.improve)
 
 
 @router.message(Survey.improve)
 async def improve(message: Message, state: FSMContext):
     await state.update_data(improve=message.text)
-    await message.answer("✍️ Рекомендации студенту:")
+    await message.answer(f"✍️ {OPEN_QUESTIONS[2]}")
     await state.set_state(Survey.recommendation)
 
 

@@ -1,6 +1,6 @@
 import json
 
-from questions import QUESTIONS
+from questions import QUESTIONS, OPEN_QUESTIONS
 
 from openpyxl import Workbook
 
@@ -277,11 +277,11 @@ def export_one_survey(data):
 
     comments = [
 
-        ("Лучшие качества студента", data[9]),
+        (OPEN_QUESTIONS[0], data[9]),
 
-        ("Что необходимо улучшить", data[10]),
+        (OPEN_QUESTIONS[1], data[10]),
 
-        ("Рекомендации наставника", data[11])
+        (OPEN_QUESTIONS[2], data[11])
 
     ]
 
