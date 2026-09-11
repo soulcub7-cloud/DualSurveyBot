@@ -345,8 +345,11 @@ def save_survey(
         )
     )
 
+    survey_id = cursor.lastrowid
     conn.commit()
     conn.close()
+
+    return survey_id
 
 
 def get_surveys_by_mentor(mentor_id):
@@ -1099,3 +1102,58 @@ def get_statistics():
         satisfactory,
         poor
     )
+
+
+def get_surveys_for_lms_sync(survey_id=None):
+    """Return complete saved questionnaires without changing the bot database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT
+            surveys.id,
+            students.fio,
+            students.stream,
+            mentors.fio,
+            mentors.telegram_id,
+            COALESCE(surveys.enterprise, students.enterprise, ''),
+            surveys.survey_date,
+            surveys.answers,
+            surveys.average,
+            surveys.best,
+            surveys.improve,
+            surveys.recommendation
+        FROM surveys
+        JOIN students ON students.id = surveys.student_id
+        JOIN mentors ON mentors.id = surveys.mentor_id
+    """
+    params = ()
+    if survey_id is not None:
+        query += " WHERE surveys.id = ?"
+        params = (survey_id,)
+    query += " ORDER BY surveys.id"
+    cursor.execute(query, params)
+    result = []
+    for row in cursor.fetchall():
+        try:
+            answers = json.loads(row[7])
+        except (TypeError, json.JSONDecodeError):
+            answers = []
+        result.append(
+            {
+                "source": "dual-survey-bot",
+                "survey_id": row[0],
+                "student_name": row[1],
+                "stream": row[2],
+                "mentor_name": row[3],
+                "mentor_external_id": row[4],
+                "enterprise": row[5],
+                "survey_date": row[6],
+                "answers": answers,
+                "average": row[8],
+                "best": row[9],
+                "improve": row[10],
+                "recommendation": row[11],
+            }
+        )
+    conn.close()
+    return result

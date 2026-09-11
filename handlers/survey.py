@@ -8,6 +8,7 @@ from aiogram.types import (
 from aiogram.fsm.context import FSMContext
 
 from datetime import datetime
+import asyncio
 import json
 
 from keyboards import (
@@ -35,6 +36,7 @@ from utils.survey_manager import (
     get_question,
     format_question
 )
+from lms_sync import sync_survey
 
 router = Router()
 
@@ -471,7 +473,7 @@ async def finish(message: Message, state: FSMContext):
 
     mentor_id = get_mentor_id(message.from_user.id)
 
-    save_survey(
+    survey_id = save_survey(
         mentor_id=mentor_id,
         student_id=data["student_id"],
         enterprise=data["enterprise"],
@@ -482,6 +484,10 @@ async def finish(message: Message, state: FSMContext):
         recommendation=data["recommendation"],
         survey_date=datetime.now().strftime("%d.%m.%Y %H:%M")
     )
+
+    # Сохранение анкеты в боте всегда остаётся основным действием.
+    # Передача в LMS выполняется в фоне и не мешает наставнику продолжать работу.
+    asyncio.create_task(sync_survey(survey_id))
 
     student = get_student(data["student_id"])
 

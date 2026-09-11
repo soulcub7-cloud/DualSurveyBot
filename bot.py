@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 
@@ -13,6 +14,7 @@ from handlers.registration import router as registration_router
 from handlers.survey import router as survey_router
 from handlers.specialist import router as specialist_router
 from fill_students import sync_reference_data
+from lms_sync import periodic_lms_sync
 
 
 # ============================
@@ -49,7 +51,13 @@ async def main():
     print("Бот успешно запущен")
     print("=" * 50)
 
-    await dp.start_polling(bot)
+    sync_task = asyncio.create_task(periodic_lms_sync())
+    try:
+        await dp.start_polling(bot)
+    finally:
+        sync_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await sync_task
 
 
 if __name__ == "__main__":
