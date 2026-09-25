@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#202428">
+  <title>CT Assembly Learning Hub</title>
+  <link rel="stylesheet" href="/styles.css?v=11.6.1">
+</head>
+<body>
+  <div id="loading" class="loading-screen" aria-live="polite">
+    <div class="loader-mark"><span></span><span></span><span></span></div>
+    <p>Загружаем учебную среду…</p>
+  </div>
+
+  <section id="auth-screen" class="auth-screen is-hidden" aria-live="polite">
+    <div class="auth-brand">
+      <div class="auth-claas-logo" aria-label="CLAAS">CLAAS</div>
+      <div class="auth-brand-copy"><strong>CT ASSEMBLY</strong><span>Dual Education</span><small>Learning Hub · Учебный центр</small></div>
+    </div>
+    <div class="auth-card">
+      <div id="login-panel">
+        <div class="eyebrow">Защищённый доступ</div>
+        <h1>Вход в систему</h1>
+        <p>Используйте номер телефона, указанный в карточке пользователя.</p>
+        <form id="login-form" class="auth-form">
+          <label><span>Номер телефона</span><input class="input" name="phone" type="tel" autocomplete="username" placeholder="+7 700 000 00 00" required></label>
+          <label><span>Пароль</span><input class="input" name="password" type="password" autocomplete="current-password" required></label>
+          <div class="auth-error" id="login-error"></div>
+          <button class="button primary full" type="submit">Войти</button>
+        </form>
+        <small class="auth-help">Если пароль утерян, обратитесь к администратору учебного центра.</small>
+      </div>
+      <div id="password-panel" class="is-hidden">
+        <div class="eyebrow">Первый вход</div>
+        <h1>Измените временный пароль</h1>
+        <p>Новый пароль должен содержать не менее 8 символов, буквы и цифры.</p>
+        <form id="password-form" class="auth-form">
+          <label><span>Текущий пароль</span><input class="input" name="current_password" type="password" autocomplete="current-password" required></label>
+          <label><span>Новый пароль</span><input class="input" name="new_password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label><span>Повторите новый пароль</span><input class="input" name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <div class="auth-error" id="password-error"></div>
+          <button class="button primary full" type="submit">Сохранить пароль</button>
+        </form>
+      </div>
+    </div>
+    <a class="photo-credit" href="https://commons.wikimedia.org/wiki/File:Claas_Tucano_430_combine_harvester.jpg" target="_blank" rel="noopener">Фото: Mick · CC BY 2.0</a>
+  </section>
+
+  <div id="app" class="app-shell is-hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-wordmark"><strong>CT ASSEMBLY</strong><span>Учебный центр</span><small class="build-badge">Версия 11.6.1 · Двойные роли</small></div>
+      </div>
+      <nav id="main-nav" class="main-nav" aria-label="Основная навигация"></nav>
+      <div class="sidebar-footer">
+        <button class="support-badge" id="help-button" type="button">
+          <span class="support-icon">?</span>
+          <div><strong>Нужна помощь?</strong><small>Инструкция по работе</small></div>
+        </button>
+        <div class="system-status"><span></span> Система работает</div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button class="mobile-menu icon-button" id="mobile-menu" aria-label="Открыть меню">☰</button>
+        <div class="breadcrumbs" id="breadcrumbs">Обзор</div>
+        <div class="topbar-actions">
+          <div class="session-role"><span>Роль</span><strong id="session-role">—</strong></div>
+          <button class="icon-button notification-button" id="notifications-button" aria-label="Уведомления">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+            <span id="notification-count"></span>
+          </button>
+          <div class="user-chip">
+            <div class="avatar avatar-navy">УЦ</div>
+            <div><strong id="user-title">Учебный центр</strong><span id="user-subtitle">Администратор</span></div>
+          </div>
+          <button class="icon-button" id="change-password-button" aria-label="Изменить пароль" title="Изменить пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></button>
+          <button class="icon-button logout-button" id="logout-button" aria-label="Выйти" title="Выйти">↪</button>
+        </div>
+      </header>
+
+      <section id="content" class="content" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <div class="drawer-backdrop" id="drawer-backdrop"></div>
+  <aside class="notification-drawer" id="notification-drawer" aria-label="Уведомления">
+    <div class="drawer-header"><div><small>Центр событий</small><h2>Уведомления</h2></div><button class="icon-button" data-close-drawer aria-label="Закрыть">×</button></div>
+    <div id="notification-list" class="notification-list"></div>
+  </aside>
+
+  <div class="modal-backdrop" id="modal-backdrop"></div>
+  <section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head"><div><small id="modal-eyebrow">Новая запись</small><h2 id="modal-title">Форма</h2></div><button class="icon-button" data-close-modal aria-label="Закрыть">×</button></div>
+    <form id="modal-form" class="modal-form"></form>
+  </section>
+
+  <div id="toast-region" class="toast-region" aria-live="assertive"></div>
+  <script src="/app.js?v=11.6.1" defer></script>
+</body>
+</html>
