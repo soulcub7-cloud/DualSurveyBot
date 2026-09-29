@@ -310,7 +310,7 @@ async def about(message: Message):
 
     await message.answer(
         "🤖 Система анкетирования наставников\n"
-        "Версия 2.1 · Анкеты CT Assembly / CT Agro и отзывы студентов"
+        "Версия 2.1.1 · Анкеты CT Assembly / CT Agro и отзывы студентов"
     )
 
 
@@ -360,34 +360,35 @@ async def select_student(
 # НАЧАТЬ АНКЕТУ
 # =====================================================
 
-@router.callback_query(
-    Survey.confirm_student,
-    F.data == "start_survey"
-)
+@router.callback_query(F.data == "start_survey")
 async def start_survey(
     callback: CallbackQuery,
     state: FSMContext
 ):
-
-    await state.update_data(
-        question=0,
-        answers=[]
-    )
-
-    await state.set_state(Survey.answering)
-
     data = await state.get_data()
     questionnaire_key = data.get("questionnaire_key")
-    if questionnaire_key not in {"ct_assembly", "ct_agro"}:
-        await callback.answer("Сначала выберите CT Assembly или CT Agro.", show_alert=True)
+    if (
+        questionnaire_key not in {"ct_assembly", "ct_agro"}
+        or not data.get("student_id")
+        or not data.get("enterprise")
+    ):
+        await callback.answer(
+            "Данные выбора устарели. Начните новую анкету и повторите выбор.",
+            show_alert=True,
+        )
         return
+
+    # Сразу завершаем индикатор Telegram. Формирование первого вопроса и
+    # изменение сообщения выполняются после подтверждения callback.
+    await callback.answer()
+    await state.update_data(question=0, answers=[])
+    await state.set_state(Survey.answering)
+
     await callback.message.edit_text(
         format_question(questionnaire_key, 0),
         parse_mode="HTML",
         reply_markup=marks_keyboard()
     )
-
-    await callback.answer()
 
 
     # =====================================================
