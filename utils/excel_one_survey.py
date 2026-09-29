@@ -1,416 +1,146 @@
-import json
-
-from questions import QUESTIONS, OPEN_QUESTIONS
-
 from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-from openpyxl.styles import (
-    Font,
-    PatternFill,
-    Border,
-    Side,
-    Alignment
-)
-
-from openpyxl.utils import get_column_letter
+from questions import OPEN_QUESTIONS, SECTION_TITLES
+from utils.export_common import unpack_survey
 
 
-# ======================================================
-# Стили
-# ======================================================
-
-HEADER_FILL = PatternFill(
-    fill_type="solid",
-    fgColor="123A72"
-)
-
-SECTION_FILL = PatternFill(
-    fill_type="solid",
-    fgColor="EAF2FD"
-)
-
-WHITE_FONT = Font(
-    bold=True,
-    color="FFFFFF",
-    size=12
-)
-
-TITLE_FONT = Font(
-    bold=True,
-    size=16,
-    color="123A72"
-)
-
-BOLD_FONT = Font(
-    bold=True,
-    size=11
-)
-
-NORMAL_FONT = Font(
-    size=11
-)
-
-BIG_FONT = Font(
-    bold=True,
-    size=22,
-    color="123A72"
-)
-
-CENTER = Alignment(
-    horizontal="center",
-    vertical="center",
-    wrap_text=True
-)
-
-LEFT = Alignment(
-    horizontal="left",
-    vertical="center",
-    wrap_text=True
-)
-
-TOP_LEFT = Alignment(
-    horizontal="left",
-    vertical="top",
-    wrap_text=True
-)
-
-THIN = Side(
-    style="thin",
-    color="BFBFBF"
-)
-
-BORDER = Border(
-    left=THIN,
-    right=THIN,
-    top=THIN,
-    bottom=THIN
-)
+RED = "C62828"
+DARK = "263238"
+LIGHT = "F3F5F6"
+PALE_RED = "FDECEC"
+PALE_BLUE = "EAF2FD"
+WHITE = "FFFFFF"
+THIN = Side(style="thin", color="D9D9D9")
+BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
 
-# ======================================================
-# Экспорт одной анкеты
-# ======================================================
+def _style_header(row):
+    for cell in row:
+        cell.fill = PatternFill("solid", fgColor=DARK)
+        cell.font = Font(bold=True, color=WHITE)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = BORDER
+
+
+def _score_fill(score):
+    if score <= 2:
+        return "F8D7DA"
+    if score == 3:
+        return "FFF3CD"
+    if score == 4:
+        return "DFF1D8"
+    return "C6E8C6"
+
 
 def export_one_survey(data):
+    survey = unpack_survey(data)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Анкета"
+    sheet.sheet_view.showGridLines = False
 
-    wb = Workbook()
+    sheet.merge_cells("A1:E1")
+    sheet["A1"] = f"{survey['enterprise']} · Анкета наставника о студенте"
+    sheet["A1"].font = Font(bold=True, size=16, color=DARK)
+    sheet["A1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    sheet.row_dimensions[1].height = 34
 
-    ws = wb.active
-
-    ws.title = "Анкета"
-
-    # --------------------------------------------------
-    # Шапка
-    # --------------------------------------------------
-
-    ws.merge_cells("A1:C1")
-
-    title = ws["A1"]
-
-    title.value = (
-        "ТОО «CT Assembly»\n"
-        "Анкета оценки производственной практики"
-    )
-
-    title.font = TITLE_FONT
-    title.alignment = CENTER
-
-    ws.row_dimensions[1].height = 60
-
-    # пустая строка
-
-    ws.append([])
-
-    # --------------------------------------------------
-    # Заголовок карточки
-    # --------------------------------------------------
-
-    ws.append(["Поле", "Значение"])
-
-    header_row = ws.max_row
-
-    for cell in (ws[f"A{header_row}"], ws[f"B{header_row}"]):
-        cell.fill = HEADER_FILL
-        cell.font = WHITE_FONT
-        cell.alignment = CENTER
-        cell.border = BORDER
-    from openpyxl.styles import PatternFill, Border
-
-    ws[f"C{header_row}"].fill = PatternFill(fill_type=None)
-    ws[f"C{header_row}"].border = Border()
-
-    # --------------------------------------------------
-    # Карточка студента
-    # --------------------------------------------------
-
-    student = [
-
-        ["№ анкеты", data[0]],
-
-        ["Дата", data[1]],
-
-        ["Студент", data[2]],
-
-        ["Специальность", data[3]],
-
-        ["Курс", data[4]],
-
-        ["Предприятие", data[5]],
-
-        ["Наставник", data[6]]
-
+    sheet.append([])
+    sheet.append(["Поле", "Значение", "Поле", "Значение"])
+    _style_header(sheet[sheet.max_row])
+    info_rows = [
+        ("№ анкеты", survey["id"], "Дата", survey["date"]),
+        ("Студент", survey["student"], "Наставник", survey["mentor"]),
+        ("Специальность", survey["speciality"], "Курс", survey["course"]),
+        ("Предприятие", survey["enterprise"], "Тип анкеты", survey["questionnaire_title"]),
     ]
+    for values in info_rows:
+        sheet.append(values)
+        row = sheet[sheet.max_row]
+        for index, cell in enumerate(row):
+            cell.border = BORDER
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+            if index in (0, 2):
+                cell.fill = PatternFill("solid", fgColor=PALE_BLUE)
+                cell.font = Font(bold=True, color=DARK)
 
-    for row in student:
-
-        ws.append(row)
-
-        r = ws.max_row
-
-        ws[f"A{r}"].font = BOLD_FONT
-        ws[f"A{r}"].fill = SECTION_FILL
-        ws[f"A{r}"].alignment = LEFT
-
-        ws[f"B{r}"].font = NORMAL_FONT
-        ws[f"B{r}"].alignment = LEFT
-
-        ws[f"A{r}"].border = BORDER
-        ws[f"B{r}"].border = BORDER
-
-    answers = json.loads(data[7])
-        # --------------------------------------------------
-    # Таблица компетенций
-    # --------------------------------------------------
-
-    ws.append([])
-
-    ws.append([
-        "№",
-        "Критерий оценки",
-        "Оценка"
+    sheet.append([])
+    sheet.append(["Итог", "Общий балл", "Hard skills", "Soft skills", "Профессиональная пригодность"])
+    _style_header(sheet[sheet.max_row])
+    sheet.append([
+        "Результат",
+        survey["average"],
+        survey["hard_average"] if survey["hard_average"] is not None else "-",
+        survey["soft_average"] if survey["soft_average"] is not None else "-",
+        survey["suitability_score"] if survey["suitability_score"] is not None else "-",
     ])
-
-    score_header_row = ws.max_row
-
-    for cell in ws[score_header_row]:
-        cell.fill = HEADER_FILL
-        cell.font = WHITE_FONT
-        cell.alignment = CENTER
+    for cell in sheet[sheet.max_row]:
         cell.border = BORDER
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.font = Font(bold=True, size=12)
 
-    for i, answer in enumerate(answers):
+    sheet.append([])
+    sheet.append(["№", "Код", "Тип", "Критерий оценки", "Оценка"])
+    criteria_header = sheet.max_row
+    _style_header(sheet[criteria_header])
 
-        ws.append([
-            i + 1,
-            QUESTIONS[i],
-            answer
+    for number, response in enumerate(survey["responses"], 1):
+        section = response.get("section", "soft")
+        sheet.append([
+            number,
+            response.get("code", "-"),
+            SECTION_TITLES.get(section, section),
+            response.get("text", ""),
+            response["score"],
         ])
+        row = sheet[sheet.max_row]
+        for cell in row:
+            cell.border = BORDER
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+        row[0].alignment = Alignment(horizontal="center", vertical="center")
+        row[1].alignment = Alignment(horizontal="center", vertical="center")
+        row[2].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        row[4].alignment = Alignment(horizontal="center", vertical="center")
+        row[4].font = Font(bold=True)
+        row[4].fill = PatternFill("solid", fgColor=_score_fill(int(response["score"])))
+        sheet.row_dimensions[sheet.max_row].height = 34
 
-        r = ws.max_row
-
-        # Номер
-        ws[f"A{r}"].alignment = CENTER
-        ws[f"A{r}"].border = BORDER
-
-        # Критерий
-        ws[f"B{r}"].alignment = LEFT
-        ws[f"B{r}"].border = BORDER
-
-        # Оценка
-        ws[f"C{r}"].alignment = CENTER
-        ws[f"C{r}"].border = BORDER
-
-        # Чередование цветов строк
-        if i % 2 == 0:
-
-            for col in ("A", "B", "C"):
-
-                ws[f"{col}{r}"].fill = SECTION_FILL
-
-    score_last_row = ws.max_row
-
-    # --------------------------------------------------
-    # Средний балл
-    # --------------------------------------------------
-
-    ws.append([])
-
-    ws.append(["СРЕДНИЙ БАЛЛ"])
-
-    r = ws.max_row
-
-    ws.merge_cells(
-        start_row=r,
-        start_column=1,
-        end_row=r,
-        end_column=3
-    )
-
-    cell = ws.cell(r, 1)
-
-    cell.font = WHITE_FONT
-    cell.fill = HEADER_FILL
-    cell.alignment = CENTER
-    cell.border = BORDER
-
-    average = float(data[8])
-
-    ws.append([f"{average:.2f}"])
-
-    r = ws.max_row
-
-    ws.merge_cells(
-        start_row=r,
-        start_column=1,
-        end_row=r,
-        end_column=3
-    )
-
-    cell = ws.cell(r, 1)
-
-    cell.font = BIG_FONT
-    cell.alignment = CENTER
-    cell.border = BORDER
-        # --------------------------------------------------
-    # Комментарии наставника
-    # --------------------------------------------------
-
+    last_criteria_row = sheet.max_row
     comments = [
-
-        (OPEN_QUESTIONS[0], data[9]),
-
-        (OPEN_QUESTIONS[1], data[10]),
-
-        (OPEN_QUESTIONS[2], data[11])
-
+        (OPEN_QUESTIONS[0], survey["best"]),
+        (OPEN_QUESTIONS[1], survey["improve"]),
+        (OPEN_QUESTIONS[2], survey["recommendation"]),
     ]
-
     for title, text in comments:
+        sheet.append([])
+        sheet.append([title])
+        sheet.merge_cells(start_row=sheet.max_row, start_column=1, end_row=sheet.max_row, end_column=5)
+        heading = sheet.cell(sheet.max_row, 1)
+        heading.fill = PatternFill("solid", fgColor=DARK)
+        heading.font = Font(bold=True, color=WHITE)
+        heading.alignment = Alignment(vertical="center", wrap_text=True)
+        heading.border = BORDER
+        sheet.append([text or "-"])
+        sheet.merge_cells(start_row=sheet.max_row, start_column=1, end_row=sheet.max_row, end_column=5)
+        body = sheet.cell(sheet.max_row, 1)
+        body.alignment = Alignment(vertical="top", wrap_text=True)
+        body.border = BORDER
+        sheet.row_dimensions[sheet.max_row].height = 48
 
-        ws.append([])
+    widths = {"A": 10, "B": 18, "C": 24, "D": 82, "E": 16}
+    for column, width in widths.items():
+        sheet.column_dimensions[column].width = width
 
-        # Заголовок блока
+    sheet.freeze_panes = f"A{criteria_header + 1}"
+    sheet.auto_filter.ref = f"A{criteria_header}:E{last_criteria_row}"
+    sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
+    sheet.page_setup.orientation = sheet.ORIENTATION_LANDSCAPE
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    sheet.print_area = f"A1:E{sheet.max_row}"
+    sheet.print_title_rows = f"{criteria_header}:{criteria_header}"
 
-        ws.append([title])
-
-        r = ws.max_row
-
-        ws.merge_cells(
-            start_row=r,
-            start_column=1,
-            end_row=r,
-            end_column=3
-        )
-
-        cell = ws.cell(r, 1)
-
-        cell.font = WHITE_FONT
-        cell.fill = HEADER_FILL
-        cell.alignment = LEFT
-        cell.border = BORDER
-
-        # Текст комментария
-
-        ws.append([text if text else "-"])
-
-        r = ws.max_row
-
-        ws.merge_cells(
-            start_row=r,
-            start_column=1,
-            end_row=r,
-            end_column=3
-        )
-
-        cell = ws.cell(r, 1)
-
-        cell.font = NORMAL_FONT
-        cell.alignment = TOP_LEFT
-        cell.border = BORDER
-
-        ws.row_dimensions[r].height = 55
-            # --------------------------------------------------
-    # Настройка ширины столбцов
-    # --------------------------------------------------
-
-    ws.column_dimensions["A"].width = 22
-    ws.column_dimensions["B"].width = 85
-    ws.column_dimensions["C"].width = 14
-
-    # --------------------------------------------------
-    # Высота строк
-    # --------------------------------------------------
-
-    # Заголовок документа
-    ws.row_dimensions[1].height = 60
-
-    # Строки карточки студента
-    for row in range(4, 11):
-        ws.row_dimensions[row].height = 24
-
-    # Строки с критериями оценки
-    for row in range(score_header_row + 1, score_last_row + 1):
-        ws.row_dimensions[row].height = 38
-
-    # --------------------------------------------------
-    # Автофильтр
-    # --------------------------------------------------
-
-    ws.auto_filter.ref = (
-        f"A{score_header_row}:C{score_last_row}"
-    )
-
-    # --------------------------------------------------
-    # Закрепить только первую строку
-    # --------------------------------------------------
-
-    ws.freeze_panes = "A2"
-
-    # --------------------------------------------------
-    # Скрыть сетку
-    # --------------------------------------------------
-
-    ws.sheet_view.showGridLines = False
-
-    # --------------------------------------------------
-    # Настройки страницы
-    # --------------------------------------------------
-
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-
-    ws.page_margins.left = 0.4
-    ws.page_margins.right = 0.4
-    ws.page_margins.top = 0.5
-    ws.page_margins.bottom = 0.5
-
-    ws.print_options.gridLines = False
-
-    # --------------------------------------------------
-    # Область печати
-    # --------------------------------------------------
-
-    ws.print_area = f"A1:C{ws.max_row}"
-
-    # --------------------------------------------------
-    # Повторять первую строку при печати
-    # --------------------------------------------------
-
-    ws.print_title_rows = "1:1"
-
-    # --------------------------------------------------
-    # Центрирование по ширине листа
-    # --------------------------------------------------
-
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-
-    # --------------------------------------------------
-    # Сохранение
-    # --------------------------------------------------
-
-    filename = f"survey_{data[0]}.xlsx"
-
-    wb.save(filename)
-
+    filename = f"survey_{survey['id']}.xlsx"
+    workbook.save(filename)
     return filename

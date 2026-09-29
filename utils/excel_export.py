@@ -1,219 +1,100 @@
-import json
-
-from questions import QUESTIONS, OPEN_QUESTIONS
-
 from openpyxl import Workbook
-
-from openpyxl.styles import (
-    Font,
-    PatternFill,
-    Border,
-    Side,
-    Alignment
-)
-
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from openpyxl.formatting.rule import ColorScaleRule
+from questions import OPEN_QUESTIONS, SECTION_TITLES
+from utils.export_common import unpack_survey
 
-# --------------------------------------------------
-# Стили
-# --------------------------------------------------
 
-HEADER_FILL = PatternFill(
-    fill_type="solid",
-    fgColor="123A72"
-)
+DARK = "263238"
+WHITE = "FFFFFF"
+THIN = Side(style="thin", color="D9D9D9")
+BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
-HEADER_FONT = Font(
-    bold=True,
-    color="FFFFFF"
-)
 
-BOLD_FONT = Font(
-    bold=True
-)
+def _header(sheet):
+    for cell in sheet[1]:
+        cell.fill = PatternFill("solid", fgColor=DARK)
+        cell.font = Font(bold=True, color=WHITE)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = BORDER
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = f"A1:{get_column_letter(sheet.max_column)}{sheet.max_row}"
 
-CENTER = Alignment(
-    horizontal="center",
-    vertical="center",
-    wrap_text=True
-)
 
-LEFT = Alignment(
-    vertical="top",
-    wrap_text=True
-)
+def _body(sheet, centered_columns=()):
+    for row in sheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.border = BORDER
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            if cell.column in centered_columns:
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-THIN = Side(
-    style="thin",
-    color="C8C8C8"
-)
 
-BORDER = Border(
-    left=THIN,
-    right=THIN,
-    top=THIN,
-    bottom=THIN
-)
+def _set_widths(sheet, widths):
+    for index, width in enumerate(widths, 1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+
 
 def export_surveys_to_excel(data):
+    surveys = [unpack_survey(item) for item in data]
+    workbook = Workbook()
 
-    wb = Workbook()
-
-    ws = wb.active
-
-    ws.title = "Анкеты"
-
-    headers = [
-
-        "№",
-
-        "Дата",
-
-        "Студент",
-
-        "Специальность",
-
-        "Курс",
-
-        "Предприятие",
-
-        "Наставник"
-
-    ]
-
-    headers.extend(QUESTIONS)
-
-    headers.extend([
-
-        "Средний балл",
-        OPEN_QUESTIONS[0],
-        OPEN_QUESTIONS[1],
-        OPEN_QUESTIONS[2]
-
+    summary = workbook.active
+    summary.title = "Сводка"
+    summary.append([
+        "№", "Дата", "Студент", "Специальность", "Курс", "Предприятие",
+        "Наставник", "Тип анкеты", "Количество критериев", "Общий балл",
+        "Hard skills", "Soft skills", "Профпригодность",
     ])
-
-    ws.append(headers)
-
-    for cell in ws[1]:
-
-        cell.fill = HEADER_FILL
-
-        cell.font = HEADER_FONT
-
-        cell.alignment = CENTER
-
-        cell.border = BORDER
-
-    ws.freeze_panes = "A2"
-
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
-
-        # --------------------------------------------------
-    # Заполнение таблицы
-    # --------------------------------------------------
-
-    for survey in data:
-
-        answers = json.loads(survey[7])
-
-        row = [
-
-            survey[0],
-            survey[1],
-            survey[2],
-            survey[3],
-            survey[4],
-            survey[5],
-            survey[6]
-
-        ]
-
-        row.extend(answers)
-
-        row.extend([
-
-            float(survey[8]),
-
-            survey[9],
-
-            survey[10],
-
-            survey[11]
-
+    for survey in surveys:
+        summary.append([
+            survey["id"], survey["date"], survey["student"], survey["speciality"],
+            survey["course"], survey["enterprise"], survey["mentor"],
+            survey["questionnaire_title"], len(survey["responses"]), survey["average"],
+            survey["hard_average"], survey["soft_average"], survey["suitability_score"],
         ])
+    _header(summary)
+    _body(summary, centered_columns=(1, 5, 9, 10, 11, 12, 13))
+    _set_widths(summary, [9, 20, 32, 30, 10, 22, 30, 20, 17, 14, 14, 14, 17])
 
-        ws.append(row)
-    # --------------------------------------------------
-    # Оформление таблицы
-    # --------------------------------------------------
+    scores = workbook.create_sheet("Оценки")
+    scores.append([
+        "№ анкеты", "Дата", "Студент", "Предприятие", "Наставник",
+        "Тип анкеты", "Код компетенции", "Тип навыка", "Критерий", "Оценка",
+    ])
+    for survey in surveys:
+        for response in survey["responses"]:
+            scores.append([
+                survey["id"], survey["date"], survey["student"], survey["enterprise"],
+                survey["mentor"], survey["questionnaire_title"], response.get("code", "-"),
+                SECTION_TITLES.get(response.get("section"), response.get("section", "-")),
+                response.get("text", ""), response["score"],
+            ])
+    _header(scores)
+    _body(scores, centered_columns=(1, 7, 8, 10))
+    _set_widths(scores, [12, 20, 32, 22, 30, 20, 18, 18, 82, 12])
 
-    for row in ws.iter_rows(min_row=2):
+    comments = workbook.create_sheet("Комментарии")
+    comments.append([
+        "№ анкеты", "Дата", "Студент", "Предприятие", "Наставник",
+        OPEN_QUESTIONS[0], OPEN_QUESTIONS[1], OPEN_QUESTIONS[2],
+    ])
+    for survey in surveys:
+        comments.append([
+            survey["id"], survey["date"], survey["student"], survey["enterprise"],
+            survey["mentor"], survey["best"], survey["improve"], survey["recommendation"],
+        ])
+    _header(comments)
+    _body(comments, centered_columns=(1,))
+    _set_widths(comments, [12, 20, 32, 22, 30, 55, 55, 55])
 
-        for cell in row:
+    for sheet in workbook.worksheets:
+        sheet.sheet_view.showGridLines = False
+        sheet.page_setup.orientation = sheet.ORIENTATION_LANDSCAPE
+        sheet.page_setup.fitToWidth = 1
+        sheet.page_setup.fitToHeight = 0
 
-            cell.border = BORDER
-
-            if cell.column <= 23:
-                cell.alignment = CENTER
-            else:
-                cell.alignment = LEFT
-    
-    # --------------------------------------------------
-    # Цветовая шкала среднего балла
-    # --------------------------------------------------
-
-    avg_column = get_column_letter(23)
-
-    ws.conditional_formatting.add(
-
-        f"{avg_column}2:{avg_column}{ws.max_row}",
-
-        ColorScaleRule(
-
-            start_type="num",
-            start_value=2,
-            start_color="F8696B",
-
-            mid_type="num",
-            mid_value=3.5,
-            mid_color="FFEB84",
-
-            end_type="num",
-            end_value=5,
-            end_color="63BE7B"
-
-        )
-
-    )
-
-    # --------------------------------------------------
-    # Автоматическая ширина
-    # --------------------------------------------------
-
-    for column in ws.columns:
-
-        length = 0
-
-        letter = column[0].column_letter
-
-        for cell in column:
-
-            try:
-
-                if len(str(cell.value)) > length:
-                    length = len(str(cell.value))
-
-            except Exception:
-                pass
-
-        width = min(max(length + 2, 12), 45)
-
-        ws.column_dimensions[letter].width = width
-        
     filename = "surveys.xlsx"
-
-    wb.save(filename)
-
+    workbook.save(filename)
     return filename

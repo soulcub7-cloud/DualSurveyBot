@@ -93,7 +93,7 @@ async def choose_feedback_mentor(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         f"👨‍🏭 Наставник: <b>{html.escape(mentor['full_name'])}</b>\n"
         f"🏭 Предприятие: <b>{html.escape(mentor.get('enterprise') or 'Не указано')}</b>\n\n"
-        "Введите название учебного модуля, вида работ или участка, по которому проходила практика.",
+        "Введите название учебного модуля.",
         parse_mode="HTML",
     )
     await callback.answer()
@@ -103,7 +103,7 @@ async def choose_feedback_mentor(callback: CallbackQuery, state: FSMContext):
 async def enter_feedback_module(message: Message, state: FSMContext):
     module = (message.text or "").strip()
     if len(module) < 2:
-        await message.answer("Введите название модуля или вида работ.")
+        await message.answer("Введите название учебного модуля.")
         return
     await state.update_data(module=module)
     data = await state.get_data()

@@ -7,10 +7,27 @@ from database import (
     add_student,
     deactivate_missing_enterprises,
     deactivate_missing_students,
+    get_connection,
 )
 
 
 FILE_NAME = Path(__file__).resolve().parent / "students.xlsx"
+
+MEZGOV_NAME = "Мезгов Кирилл Леонидович"
+
+
+def ensure_mezgov_student():
+    # Preserve an existing card ID, Telegram registration and survey history.
+    conn = get_connection()
+    with conn:
+        full = conn.execute("SELECT id FROM students WHERE fio=?", (MEZGOV_NAME,)).fetchone()
+        short = conn.execute(
+            "SELECT id FROM students WHERE fio='Мезгов Кирилл' AND stream=2"
+        ).fetchall()
+        if not full and len(short) == 1:
+            conn.execute("UPDATE students SET fio=? WHERE id=?", (MEZGOV_NAME, short[0][0]))
+    conn.close()
+    return add_student(MEZGOV_NAME, 2, "Профессиональное обучение (по отраслям)", 3)
 
 
 def optional_text(value):
@@ -43,6 +60,8 @@ def sync_reference_data():
             continue
 
         fio = str(row[0]).strip()
+        if fio in {"Мезгов Кирилл", MEZGOV_NAME}:
+            continue  # Managed below, including workbooks with the shortened name.
         stream = int(row[1])
         speciality = optional_text(row[2] if len(row) > 2 else None)
         course = optional_int(row[3] if len(row) > 3 else None)
@@ -54,6 +73,11 @@ def sync_reference_data():
         else:
             updated += 1
 
+    if ensure_mezgov_student():
+        added += 1
+    else:
+        updated += 1
+    actual_students.append(MEZGOV_NAME)
     deactivated_students = deactivate_missing_students(actual_students)
 
     actual_enterprises = []

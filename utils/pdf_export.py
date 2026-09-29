@@ -1,574 +1,189 @@
-import json
+import html
 import os
-
-from questions import QUESTIONS, OPEN_QUESTIONS
 
 from reportlab.lib import colors
 from reportlab.lib.colors import HexColor
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-
 from reportlab.platypus import (
-    SimpleDocTemplate,
+    LongTable,
+    PageBreak,
     Paragraph,
+    SimpleDocTemplate,
     Spacer,
     Table,
     TableStyle,
-    Image,
-    HRFlowable
 )
 
-import os
+from questions import OPEN_QUESTIONS, SECTION_TITLES
+from utils.export_common import unpack_survey
 
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
-)
 
-FONT_DIR = os.path.join(
-    BASE_DIR,
-    "assets",
-    "fonts"
-)
-
-LOGO_PATH = os.path.join(
-    BASE_DIR,
-    "assets",
-    "logo_ct_assembly.png"
-)
-
-pdfmetrics.registerFont(
-    TTFont(
-        "DejaVu",
-        os.path.join(FONT_DIR, "DejaVuSans.ttf")
-    )
-)
-
-pdfmetrics.registerFont(
-    TTFont(
-        "DejaVu-Bold",
-        os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")
-    )
-)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FONT_DIR = os.path.join(BASE_DIR, "assets", "fonts")
+pdfmetrics.registerFont(TTFont("DejaVu", os.path.join(FONT_DIR, "DejaVuSans.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVu-Bold", os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")))
 
 NORMAL_FONT = "DejaVu"
 BOLD_FONT = "DejaVu-Bold"
-
-
-styles = getSampleStyleSheet()
-
-
-# -----------------------------
-# Регистрация шрифтов
-# -----------------------------
-
-
-BOLD_FONT = "DejaVu-Bold"
-NORMAL_FONT = "DejaVu"
-
+DARK = HexColor("#263238")
+PALE = HexColor("#F3F5F6")
+GRID = HexColor("#D9D9D9")
 
 styles = getSampleStyleSheet()
-
-
-TITLE_STYLE = ParagraphStyle(
-    "TITLE",
-    parent=styles["Heading1"],
-    fontName=BOLD_FONT,
-    fontSize=20,
-    alignment=TA_CENTER,
-    textColor=HexColor("#123A72"),
-    spaceAfter=10
+TITLE = ParagraphStyle(
+    "SurveyTitle", parent=styles["Heading1"], fontName=BOLD_FONT,
+    fontSize=16, leading=20, alignment=TA_CENTER, textColor=DARK, spaceAfter=10,
 )
-
-SUBTITLE_STYLE = ParagraphStyle(
-    "SUBTITLE",
-    parent=styles["Heading2"],
-    fontName=BOLD_FONT,
-    fontSize=12,
-    alignment=TA_CENTER,
-    textColor=HexColor("#123A72"),
-    spaceAfter=12
+HEADING = ParagraphStyle(
+    "SurveyHeading", parent=styles["Heading2"], fontName=BOLD_FONT,
+    fontSize=11, leading=14, textColor=DARK, spaceBefore=8, spaceAfter=5,
 )
-
-HEADING_STYLE = ParagraphStyle(
-    "HEADING",
-    parent=styles["Heading2"],
-    fontName=BOLD_FONT,
-    fontSize=12,
-    textColor=HexColor("#123A72"),
-    spaceAfter=6
+BODY = ParagraphStyle(
+    "SurveyBody", parent=styles["Normal"], fontName=NORMAL_FONT,
+    fontSize=8.5, leading=12, alignment=TA_LEFT,
 )
-
-NORMAL_STYLE = ParagraphStyle(
-    "NORMAL",
-    parent=styles["Normal"],
-    fontName=NORMAL_FONT,
-    fontSize=10,
-    leading=16,
-    alignment=TA_LEFT
+BODY_CENTER = ParagraphStyle("SurveyCenter", parent=BODY, alignment=TA_CENTER)
+HEADER = ParagraphStyle(
+    "SurveyHeader", parent=BODY_CENTER, fontName=BOLD_FONT, textColor=colors.white,
 )
+SMALL = ParagraphStyle("SurveySmall", parent=BODY, fontSize=7.5, leading=10)
 
-CENTER_STYLE = ParagraphStyle(
-    "CENTER",
-    parent=NORMAL_STYLE,
-    alignment=TA_CENTER
-)
 
-BIG_STYLE = ParagraphStyle(
-    "BIG",
-    parent=NORMAL_STYLE,
-    fontName=BOLD_FONT,
-    fontSize=26,
-    alignment=TA_CENTER,
-    textColor=HexColor("#123A72")
-)
-def stars(value):
-    value = max(
-    1,
-    min(
-        5,
-        int(round(float(value)))
+def _p(value, style=BODY):
+    return Paragraph(html.escape(str(value if value not in (None, "") else "-")), style)
+
+
+def _score_label(score):
+    labels = {1: "1 · не проявляется", 2: "2 · слабо", 3: "3 · удовлетворительно", 4: "4 · хорошо", 5: "5 · отлично"}
+    return labels.get(int(score), str(score))
+
+
+def _comment_block(title, text):
+    table = Table(
+        [[_p(title, HEADING)], [_p(text)]],
+        colWidths=[170 * mm],
     )
-)
-    return "★" * value + "☆" * (5 - value)
-
-
-def final_mark(avg):
-
-    avg = float(avg)
-
-    if avg >= 4.5:
-        return "ОТЛИЧНО"
-
-    elif avg >= 3.5:
-        return "ХОРОШО"
-
-    elif avg >= 2.5:
-        return "УДОВЛЕТВОРИТЕЛЬНО"
-
-    return "ТРЕБУЕТ УЛУЧШЕНИЯ"
-
-
-def comment_block(title, text):
-
-    tbl = Table(
-        [
-            [Paragraph(f"<b>{title}</b>", HEADING_STYLE)],
-            [Paragraph(text if text else "-", NORMAL_STYLE)]
-        ],
-        colWidths=[170 * mm]
-    )
-
-    tbl.setStyle(TableStyle([
-
-        ("BACKGROUND", (0, 0), (-1, 0), HexColor("#EAF2FD")),
-
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), PALE),
+        ("BOX", (0, 0), (-1, -1), 0.5, GRID),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, GRID),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-
-        ("TOPPADDING", (0, 0), (-1, -1), 7)
-
     ]))
-
-    return tbl
+    return table
 
 
 def export_one_pdf(data):
-
-    filename = f"survey_{data[0]}.pdf"
-
-    doc = SimpleDocTemplate(
-        filename,
-        leftMargin=18 * mm,
-        rightMargin=18 * mm,
-        topMargin=18 * mm,
-        bottomMargin=18 * mm
+    survey = unpack_survey(data)
+    filename = f"survey_{survey['id']}.pdf"
+    document = SimpleDocTemplate(
+        filename, pagesize=A4,
+        leftMargin=18 * mm, rightMargin=18 * mm,
+        topMargin=16 * mm, bottomMargin=16 * mm,
+        title=f"Анкета №{survey['id']} · {survey['student']}",
     )
 
-    story = []
-
-    # --------------------------------------------------
-    # Логотип
-    # --------------------------------------------------
-
-    logo = Spacer(1, 1)
-
-    logo_path = LOGO_PATH
-
-    if os.path.exists(logo_path):
-        logo = Image(
-            logo_path,
-            width=34 * mm,
-            height=24 * mm
-        )
-
-    # --------------------------------------------------
-    # Шапка документа
-    # --------------------------------------------------
-
-    header = Table(
-        [
-            [
-                logo,
-                Paragraph(
-                    "<b>ТОО «CT Assembly»</b>"
-                    "ОЦЕНКА РЕЗУЛЬТАТОВ ПРОИЗВОДСТВЕННОЙ ПРАКТИКИ",
-                    SUBTITLE_STYLE
-                )
-            ]
-        ],
-        colWidths=[42 * mm, 128 * mm]
-    )
-
-    header.setStyle(TableStyle([
-
-    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-
-    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-
-    ("LINEBELOW", (0, 0), (-1, 0), 1.3, HexColor("#123A72"))
-
-]))
-
-    story.append(header)
-    story.append(Spacer(1, 12))
-    
-
-    
-    student_table = Table(
-
-        [
-
-            ["№ анкеты", data[0]],
-
-            ["Дата", data[1]],
-
-            ["Студент", data[2]],
-
-            ["Специальность", data[3]],
-
-            ["Курс", data[4]],
-
-            ["Предприятие", data[5]],
-
-            ["Наставник", data[6]]
-
-        ],
-
-        colWidths=[45 * mm, 125 * mm]
-
-    )
-
-    student_table.setStyle(TableStyle([
-
-    ("BACKGROUND", (0, 0), (0, -1), HexColor("#EAF2FD")),
-
-    ("FONTNAME", (0, 0), (0, -1), BOLD_FONT),
-
-    ("FONTNAME", (1, 0), (1, -1), NORMAL_FONT),
-
-    ("TEXTCOLOR", (0, 0), (0, -1), HexColor("#123A72")),
-
-    ("GRID", (0, 0), (-1, -1), 0.35, HexColor("#D0D0D0")),
-
-    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-
-    ("TOPPADDING", (0, 0), (-1, -1), 8),
-
-    ("LEFTPADDING", (0, 0), (-1, -1), 8),
-
-    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-
-    ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
-
-]))
-
-    story.append(student_table)
-
-    story.append(Spacer(1, 14))
-    story.append(
-        Paragraph(
-            "ОЦЕНКА КОМПЕТЕНЦИЙ СТУДЕНТА",
-            HEADING_STYLE
-        )
-    )
-
-        # --------------------------------------------------
-    # Оценка компетенций
-    # --------------------------------------------------
-
-    answers = json.loads(data[7])
-
-    rows = [
-        [
-            Paragraph("<b>№</b>", CENTER_STYLE),
-            Paragraph("<b>Критерий оценки</b>", CENTER_STYLE),
-            Paragraph("<b>Оценка</b>", CENTER_STYLE)
-        ]
+    story = [
+        Paragraph(f"{html.escape(survey['enterprise'])}<br/>Анкета наставника о студенте", TITLE),
     ]
 
-    for i, answer in enumerate(answers):
-
-        rows.append([
-            Paragraph(str(i + 1), CENTER_STYLE),
-            Paragraph(QUESTIONS[i], NORMAL_STYLE),
-            Paragraph(stars(answer), CENTER_STYLE)
-        ])
-
-    score_table = Table(
-        rows,
-        colWidths=[12 * mm, 128 * mm, 30 * mm],
-        repeatRows=1
-    )
-
-    score_table.setStyle(TableStyle([
-
-        ("FONTNAME", (0, 0), (-1, -1), NORMAL_FONT),
-        ("FONTNAME", (0, 0), (-1, 0), BOLD_FONT),
-
-        ("BACKGROUND", (0, 0), (-1, 0), HexColor("#123A72")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
-
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-
-        ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (2, 1), (2, -1), "CENTER"),
-
+    info = [
+        [_p("№ анкеты", SMALL), _p(survey["id"]), _p("Дата", SMALL), _p(survey["date"])],
+        [_p("Студент", SMALL), _p(survey["student"]), _p("Наставник", SMALL), _p(survey["mentor"])],
+        [_p("Специальность", SMALL), _p(survey["speciality"]), _p("Курс", SMALL), _p(survey["course"])],
+        [_p("Предприятие", SMALL), _p(survey["enterprise"]), _p("Тип анкеты", SMALL), _p(survey["questionnaire_title"])],
+    ]
+    info_table = Table(info, colWidths=[28 * mm, 57 * mm, 28 * mm, 57 * mm])
+    info_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), PALE),
+        ("BACKGROUND", (2, 0), (2, -1), PALE),
+        ("FONTNAME", (0, 0), (0, -1), BOLD_FONT),
+        ("FONTNAME", (2, 0), (2, -1), BOLD_FONT),
+        ("GRID", (0, 0), (-1, -1), 0.4, GRID),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-
         ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6)
-
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
+    story.extend([info_table, Spacer(1, 10)])
 
-    for r in range(1, len(rows)):
-        if r % 2 == 0:
-            score_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, r), (-1, r), HexColor("#F8F9FA"))
-            ]))
-
-    story.append(score_table)
-
-    story.append(Spacer(1, 15))
-
-        # --------------------------------------------------
-    # Итоговая оценка
-    # --------------------------------------------------
-
-    average = float(data[8])
-    result = final_mark(average)
-
-    if average >= 4.5:
-        result_color = HexColor("#2E7D32")   # Зеленый
-    elif average >= 3.5:
-        result_color = HexColor("#1565C0")   # Синий
-    elif average >= 2.5:
-        result_color = HexColor("#F9A825")   # Желтый
-    else:
-        result_color = HexColor("#C62828")   # Красный
-
-    summary = Table(
-        [
-            [
-                Paragraph(
-                    "<font color='white'><b>ИТОГОВАЯ ОЦЕНКА</b></font>",
-                    CENTER_STYLE
-                )
-            ],
-            [
-                Paragraph(
-                    f"{average:.2f}",
-                    BIG_STYLE
-                )
-            ],
-            [
-                Paragraph(
-                    f"<font size='18'>{stars(round(average))}</font>",
-                    CENTER_STYLE
-                )
-            ],
-            [
-                Paragraph(
-                    f"<font color='{result_color.hexval()}'><b>{result}</b></font>",
-                    CENTER_STYLE
-                )
-            ]
-        ],
-        colWidths=[170 * mm]
-    )
-
+    summary_rows = [
+        [_p("Общий балл", HEADER), _p("Hard skills", HEADER), _p("Soft skills", HEADER), _p("Профпригодность", HEADER)],
+        [_p(f"{survey['average']:.2f}", BODY_CENTER), _p(survey["hard_average"], BODY_CENTER), _p(survey["soft_average"], BODY_CENTER), _p(survey["suitability_score"], BODY_CENTER)],
+    ]
+    summary = Table(summary_rows, colWidths=[42.5 * mm] * 4)
     summary.setStyle(TableStyle([
-
-        ("BACKGROUND", (0, 0), (-1, 0), HexColor("#123A72")),
-
-        ("BACKGROUND", (0, 1), (-1, -1), HexColor("#FAFAFA")),
-
-        ("GRID", (0, 0), (-1, -1), 0.6, HexColor("#BDBDBD")),
-
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-
-        ("TOPPADDING", (0, 0), (-1, -1), 12),
-
-        ("ALIGN", (0, 0), (-1, -1), "CENTER")
-
+        ("BACKGROUND", (0, 0), (-1, 0), DARK),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, -1), BOLD_FONT),
+        ("GRID", (0, 0), (-1, -1), 0.4, GRID),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
     ]))
+    story.extend([summary, Spacer(1, 10), Paragraph("Оценка компетенций", HEADING)])
 
-    story.append(summary)
+    rows = [[_p("Код", HEADER), _p("Тип", HEADER), _p("Критерий оценки", HEADER), _p("Оценка", HEADER)]]
+    for response in survey["responses"]:
+        rows.append([
+            _p(response.get("code", "-"), BODY_CENTER),
+            _p(SECTION_TITLES.get(response.get("section"), response.get("section", "-")), BODY_CENTER),
+            _p(response.get("text", "")),
+            _p(_score_label(response["score"]), BODY_CENTER),
+        ])
+    scores = LongTable(rows, colWidths=[25 * mm, 25 * mm, 97 * mm, 23 * mm], repeatRows=1)
+    score_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), DARK),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), BOLD_FONT),
+        ("GRID", (0, 0), (-1, -1), 0.35, GRID),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]
+    for row_number in range(2, len(rows), 2):
+        score_style.append(("BACKGROUND", (0, row_number), (-1, row_number), PALE))
+    scores.setStyle(TableStyle(score_style))
+    story.append(scores)
 
-    story.append(Spacer(1, 18))
-    # --------------------------------------------------
-    # Комментарии наставника
-    # --------------------------------------------------
-
-    story.append(
-    comment_block(
-        OPEN_QUESTIONS[0],
-        data[9]
-    )
-)
-
-    story.append(Spacer(1, 8))
-
-    story.append(
-        comment_block(
-            OPEN_QUESTIONS[1],
-            data[10]
-        )
-    )
-
-    story.append(Spacer(1, 8))
-
-    story.append(
-        comment_block(
-            OPEN_QUESTIONS[2],
-            data[11]
-        )
-    )
-
-    story.append(Spacer(1, 18))
-
-# --------------------------------------------------
-# Подпись
-# --------------------------------------------------
-
-    story.append(
-        HRFlowable(
-            width="100%",
-            thickness=1,
-            color=HexColor("#B0B0B0")
-        )
-    )
-
-    story.append(Spacer(1, 12))
+    story.extend([Spacer(1, 12), Paragraph("Комментарии наставника", HEADING)])
+    for title, value in (
+        (OPEN_QUESTIONS[0], survey["best"]),
+        (OPEN_QUESTIONS[1], survey["improve"]),
+        (OPEN_QUESTIONS[2], survey["recommendation"]),
+    ):
+        story.extend([_comment_block(title, value), Spacer(1, 7)])
 
     signature = Table(
-
-        [
-
-            [
-                Paragraph(
-                    "<b>Наставник предприятия</b>",
-                    NORMAL_STYLE
-                ),
-
-                Paragraph(
-                    "<b>Подпись</b>",
-                    NORMAL_STYLE
-                )
-
-            ],
-
-            [
-
-                Paragraph(data[6], NORMAL_STYLE),
-
-                Paragraph("______________________", NORMAL_STYLE)
-
-            ]
-
-        ],
-
-        colWidths=[110 * mm, 60 * mm]
-
+        [[_p("Наставник", SMALL), _p(survey["mentor"]), _p("Подпись", SMALL), _p("________________")]],
+        colWidths=[25 * mm, 75 * mm, 22 * mm, 48 * mm],
     )
-
     signature.setStyle(TableStyle([
-
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-
-        ("BACKGROUND", (0, 0), (-1, 0), HexColor("#EAF2FD")),
-
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
-
+        ("GRID", (0, 0), (-1, -1), 0.4, GRID),
+        ("BACKGROUND", (0, 0), (0, 0), PALE),
+        ("BACKGROUND", (2, 0), (2, 0), PALE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
     ]))
+    story.extend([Spacer(1, 6), signature])
 
-    story.append(signature)
-
-    story.append(Spacer(1, 15))
-# --------------------------------------------------
-# Дата формирования документа
-# --------------------------------------------------
-
-    story.append(
-        Paragraph(
-            f"Дата формирования отчета: {data[1]}",
-            CENTER_STYLE
-        )
-    )
-
-    story.append(Spacer(1, 8))
-
-# --------------------------------------------------
- # Нижний колонтитул
-# --------------------------------------------------
-
-    story.append(
-        Paragraph(
-            "<font size='8' color='#666666'>"
-            "Документ сформирован автоматически системой оценки "
-            "производственной практики CT Assembly"
-            "</font>",
-            CENTER_STYLE
-        )
-    )
-
-# --------------------------------------------------
-# Формирование PDF
-# --------------------------------------------------
-
-    def add_page_number(canvas, doc):
-
+    def page_number(canvas, doc):
         canvas.saveState()
-
-        canvas.setFont(NORMAL_FONT, 9)
-
+        canvas.setFont(NORMAL_FONT, 8)
         canvas.setFillColor(HexColor("#666666"))
-
-        canvas.drawRightString(
-            200 * mm,
-            10 * mm,
-            f"Страница {doc.page}"
-        )
-
+        canvas.drawRightString(198 * mm, 9 * mm, f"Страница {doc.page}")
         canvas.restoreState()
 
-    doc.build(
-        story,
-        onFirstPage=add_page_number,
-        onLaterPages=add_page_number
-    )
-
+    document.build(story, onFirstPage=page_number, onLaterPages=page_number)
     return filename
