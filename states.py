@@ -2,7 +2,10 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class Registration(StatesGroup):
+    choosing_role = State()
     waiting_for_fio = State()
+    choosing_student_stream = State()
+    choosing_student = State()
 
 
 class Survey(StatesGroup):
@@ -22,3 +25,11 @@ class Survey(StatesGroup):
     improve = State()
 
     recommendation = State()
+
+
+class MentorFeedback(StatesGroup):
+    choosing_mentor = State()
+    entering_module = State()
+    confirming = State()
+    answering = State()
+    open_answer = State()

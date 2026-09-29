@@ -5,14 +5,52 @@ from aiogram.types import (
     InlineKeyboardButton
 )
 
-from database import get_streams, get_students_by_stream
+from database import get_streams, get_students_by_stream, get_mentor_role
 
 
 # ============================
 # ГЛАВНОЕ МЕНЮ
 # ============================
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from database import get_mentor_role
+
+
+def registration_role_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="👨‍🏭 Я наставник", callback_data="register_role_mentor")],
+            [InlineKeyboardButton(text="👨‍🎓 Я студент", callback_data="register_role_student")],
+        ]
+    )
+
+
+def registration_streams_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"{stream} поток", callback_data=f"reg_stream_{stream}")]
+            for stream in get_streams()
+        ]
+    )
+
+
+def registration_students_keyboard(stream):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"👨‍🎓 {fio}", callback_data=f"reg_student_{student_id}")]
+            for student_id, fio in get_students_by_stream(stream)
+        ] + [[InlineKeyboardButton(text="⬅ К выбору потока", callback_data="reg_back_streams")]]
+    )
+
+
+def student_menu_builder():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🗣 Оценить наставника")],
+            [KeyboardButton(text="📋 Мои отзывы")],
+            [KeyboardButton(text="ℹ️ О программе")],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие...",
+    )
 
 
 def main_menu_builder(telegram_id):
@@ -105,6 +143,31 @@ def marks_keyboard():
             InlineKeyboardButton(text="⭐5", callback_data="mark_5")
         ]]
     )
+
+
+def mentor_directory_keyboard(mentors):
+    keyboard = []
+    for mentor in mentors:
+        location = " · ".join(item for item in (mentor.get("enterprise"), mentor.get("city")) if item)
+        label = mentor.get("full_name", "Наставник")
+        if location:
+            label = f"{label} · {location}"
+        keyboard.append([
+            InlineKeyboardButton(
+                text=label[:64],
+                callback_data=f"feedback_mentor_{mentor['lms_id']}",
+            )
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def start_mentor_feedback_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="▶ Начать отзыв", callback_data="feedback_start")],
+            [InlineKeyboardButton(text="👨‍🏭 Выбрать другого наставника", callback_data="feedback_back_mentors")],
+        ]
+    )
 # ============================
 # КАБИНЕТ СПЕЦИАЛИСТА
 # ============================
@@ -153,8 +216,26 @@ def specialist_panel_keyboard():
             ],
             [
                 InlineKeyboardButton(
+                    text="🗣 Отзывы студентов",
+                    callback_data="sp_mentor_feedback"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📈 Статистика отзывов",
+                    callback_data="sp_feedback_statistics"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="📥 Экспорт Excel",
                     callback_data="sp_export_excel"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📥 Отзывы Excel",
+                    callback_data="sp_feedback_excel"
                 )
             ]
         ]
@@ -243,6 +324,31 @@ def confirm_delete_keyboard(survey_id):
                     callback_data=f"sp_survey_{survey_id}"
                 )
             ]
+        ]
+    )
+
+
+def mentor_feedback_list_keyboard(records):
+    keyboard = []
+    for record in records[:50]:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"{record['mentor_name']} · {record['average']}/5 · {record['submitted_at'][:10]}",
+                callback_data=f"sp_feedback_{record['id']}",
+            )
+        ])
+    keyboard.append([InlineKeyboardButton(text="⬅ Назад", callback_data="back_specialist")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def mentor_feedback_view_keyboard(feedback_id):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📄 PDF", callback_data=f"feedback_pdf_{feedback_id}"),
+                InlineKeyboardButton(text="📥 Excel", callback_data=f"feedback_excel_{feedback_id}"),
+            ],
+            [InlineKeyboardButton(text="⬅ К отзывам", callback_data="sp_mentor_feedback")],
         ]
     )
 # ==========================================

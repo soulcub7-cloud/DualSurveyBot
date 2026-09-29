@@ -1,27 +1,39 @@
+import html
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile
+from config import ADMIN_ID, SPECIALIST_ID
 from questions import OPEN_QUESTIONS
 from database import get_survey_by_id
-from database import get_statistics
+from database import get_extended_statistics, get_statistics
 from utils.excel_one_survey import export_one_survey
 from utils.pdf_export import export_one_pdf
 from database import (
+    get_all_mentor_feedback,
     get_connection,
-    get_all_surveys_for_excel
+    get_all_surveys_for_excel,
+    get_mentor_feedback,
+    get_mentor_feedback_statistics,
 )
 
 from utils.excel_export import export_surveys_to_excel
+from utils.feedback_excel import export_mentor_feedback_excel
+from utils.feedback_pdf import export_mentor_feedback_pdf
 
-from utils.excel_export import export_surveys_to_excel
 from keyboards import (
     specialist_panel_keyboard,
     surveys_keyboard,
     survey_view_keyboard,
     confirm_delete_keyboard,
-    main_menu_builder
+    main_menu_builder,
+    mentor_feedback_list_keyboard,
+    mentor_feedback_view_keyboard,
 )
 
 router = Router()
+PRIVILEGED_IDS = {identifier for identifier in (ADMIN_ID, SPECIALIST_ID) if identifier}
+router.message.filter(lambda message: message.from_user.id in PRIVILEGED_IDS)
+router.callback_query.filter(lambda callback: callback.from_user.id in PRIVILEGED_IDS)
 
 
 # =====================================================
@@ -96,7 +108,9 @@ async def callback_students(callback: CallbackQuery):
         text += (
             f"{number}. <b>{student[1]}</b>\n"
             f"📝 Анкет: {student[2]}\n"
-            f"⭐ Средний балл: {average}\n\n"
+            f"⭐ Средний балл: {average}\n"
+            f"🔧 Hard: {student[4] if student[4] is not None else '-'} · "
+            f"🤝 Soft: {student[5] if student[5] is not None else '-'}\n\n"
         )
 
     await callback.message.edit_text(
@@ -134,7 +148,9 @@ async def callback_mentors(callback: CallbackQuery):
         text += (
             f"{number}. <b>{mentor[1]}</b>\n"
             f"📝 Заполнено анкет: {mentor[2]}\n"
-            f"⭐ Средний балл студентов: {average}\n\n"
+            f"⭐ Средний балл студентов: {average}\n"
+            f"🔧 Hard: {mentor[4] if mentor[4] is not None else '-'} · "
+            f"🤝 Soft: {mentor[5] if mentor[5] is not None else '-'}\n\n"
         )
 
     await callback.message.edit_text(
@@ -160,6 +176,7 @@ async def callback_statistics(callback: CallbackQuery):
         satisfactory,
         poor
     ) = get_statistics()
+    extended = get_extended_statistics()
 
     text = (
         "📊 <b>Общая статистика</b>\n\n"
@@ -170,6 +187,11 @@ async def callback_statistics(callback: CallbackQuery):
         f"👨‍🏭 <b>Наставников:</b> {mentors}\n"
         f"📋 <b>Заполнено анкет:</b> {surveys}\n"
         f"⭐ <b>Средний балл:</b> {average}\n\n"
+
+        f"🔧 <b>Hard skills:</b> {extended['hard_average'] if extended['hard_average'] is not None else '-'}\n"
+        f"🤝 <b>Soft skills:</b> {extended['soft_average'] if extended['soft_average'] is not None else '-'}\n"
+        f"🎓 <b>Профессиональная пригодность:</b> {extended['suitability_average'] if extended['suitability_average'] is not None else '-'}\n"
+        f"🏭 <b>CT Assembly:</b> {extended['ct_assembly_count']} · <b>CT Agro:</b> {extended['ct_agro_count']}\n\n"
 
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
@@ -185,6 +207,119 @@ async def callback_statistics(callback: CallbackQuery):
         text,
         parse_mode="HTML"
     )
+
+
+# =====================================================
+# ОТЗЫВЫ СТУДЕНТОВ О НАСТАВНИКАХ
+# =====================================================
+
+@router.callback_query(F.data == "sp_mentor_feedback")
+async def callback_mentor_feedback(callback: CallbackQuery):
+    records = get_all_mentor_feedback()
+    await callback.answer()
+    if not records:
+        await callback.message.edit_text(
+            "📭 Отзывов студентов о наставниках пока нет.",
+            reply_markup=specialist_panel_keyboard(),
+        )
+        return
+    await callback.message.edit_text(
+        "🗣 <b>Отзывы студентов о наставниках</b>\n\n"
+        "ФИО автора видно только в карточке отзыва и административных выгрузках.",
+        parse_mode="HTML",
+        reply_markup=mentor_feedback_list_keyboard(records),
+    )
+
+
+@router.callback_query(F.data == "sp_feedback_statistics")
+async def callback_feedback_statistics(callback: CallbackQuery):
+    stats = get_mentor_feedback_statistics()
+    text = (
+        "📈 <b>Статистика отзывов о наставниках</b>\n\n"
+        f"Всего отзывов: <b>{stats['count']}</b>\n"
+        f"Оценено наставников: <b>{stats['mentor_count']}</b>\n"
+        f"Средняя оценка: <b>{stats['average']}/5</b>\n\n"
+    )
+    for item in stats["mentors"][:40]:
+        text += (
+            f"• <b>{html.escape(item['mentor_name'])}</b>\n"
+            f"  {html.escape(item['enterprise'] or 'Предприятие не указано')} · "
+            f"{item['feedback_count']} отзыв(а) · {item['average']}/5\n\n"
+        )
+    await callback.answer()
+    await callback.message.edit_text(text[:4090], parse_mode="HTML", reply_markup=specialist_panel_keyboard())
+
+
+@router.callback_query(F.data.regexp(r"^sp_feedback_\d+$"))
+async def callback_open_feedback(callback: CallbackQuery):
+    feedback_id = int(callback.data.rsplit("_", 1)[1])
+    record = get_mentor_feedback(feedback_id)
+    await callback.answer()
+    if not record:
+        await callback.message.edit_text("Отзыв не найден.")
+        return
+    scores = " · ".join(
+        f"{question.get('code', index + 1)}: {score}"
+        for index, (question, score) in enumerate(zip(record["questions"], record["ratings"]))
+    )
+    text = (
+        f"🗣 <b>Отзыв №{record['id']}</b>\n\n"
+        f"👨‍🏭 <b>Наставник:</b> {html.escape(record['mentor_name'])}\n"
+        f"🏭 <b>Предприятие:</b> {html.escape(record['enterprise'] or 'Не указано')}\n"
+        f"📍 <b>Город / участок:</b> {html.escape(' · '.join(value for value in (record['city'], record['workshop']) if value) or 'Не указано')}\n"
+        f"📘 <b>Модуль:</b> {html.escape(record['module'])}\n"
+        f"⭐ <b>Средняя оценка:</b> {record['average']}/5\n"
+        f"📅 <b>Дата:</b> {record['submitted_at']}\n\n"
+        f"🔐 <b>Автор — только для администратора:</b>\n"
+        f"{html.escape(record['student_name'])} · {record['stream']} поток · {record['course']} курс\n\n"
+        f"<b>Оценки:</b>\n{scores}\n\n"
+        f"<b>Сильные стороны:</b>\n{html.escape(record['strengths'] or '-')}\n\n"
+        f"<b>Что улучшить:</b>\n{html.escape(record['weaknesses'] or '-')}\n\n"
+        f"<b>Общий вывод:</b>\n{html.escape(record['conclusion'] or '-')}"
+    )
+    await callback.message.edit_text(
+        text[:4090],
+        parse_mode="HTML",
+        reply_markup=mentor_feedback_view_keyboard(feedback_id),
+    )
+
+
+@router.callback_query(F.data == "sp_feedback_excel")
+async def callback_feedback_excel_all(callback: CallbackQuery):
+    records = get_all_mentor_feedback()
+    await callback.answer()
+    if not records:
+        await callback.message.answer("Отзывов для выгрузки пока нет.")
+        return
+    filename = export_mentor_feedback_excel(records)
+    await callback.message.answer_document(
+        document=FSInputFile(filename),
+        caption="📊 Отзывы студентов о наставниках",
+    )
+
+
+@router.callback_query(F.data.regexp(r"^feedback_excel_\d+$"))
+async def callback_feedback_excel_one(callback: CallbackQuery):
+    feedback_id = int(callback.data.rsplit("_", 1)[1])
+    record = get_mentor_feedback(feedback_id)
+    await callback.answer()
+    if not record:
+        await callback.message.answer("Отзыв не найден.")
+        return
+    filename = export_mentor_feedback_excel([record], feedback_id)
+    await callback.message.answer_document(document=FSInputFile(filename), caption=f"📊 Отзыв №{feedback_id}")
+
+
+@router.callback_query(F.data.regexp(r"^feedback_pdf_\d+$"))
+async def callback_feedback_pdf_one(callback: CallbackQuery):
+    feedback_id = int(callback.data.rsplit("_", 1)[1])
+    record = get_mentor_feedback(feedback_id)
+    await callback.answer()
+    if not record:
+        await callback.message.answer("Отзыв не найден.")
+        return
+    filename = export_mentor_feedback_pdf(record)
+    await callback.message.answer_document(document=FSInputFile(filename), caption=f"📄 Отзыв №{feedback_id}")
 
 
 # =====================================================
@@ -248,7 +383,11 @@ async def callback_open_survey(callback: CallbackQuery):
                 students.enterprise,
                 'Не указано'
             ),
-            students.stream
+            students.stream,
+            COALESCE(surveys.questionnaire_key, 'legacy'),
+            surveys.hard_average,
+            surveys.soft_average,
+            surveys.suitability_score
         FROM surveys
         JOIN students
             ON students.id = surveys.student_id
@@ -277,7 +416,11 @@ async def callback_open_survey(callback: CallbackQuery):
         f"🏭 <b>Предприятие:</b> {survey[7]}\n"
         f"👨‍🏭 <b>Наставник:</b> {survey[1]}\n"
         f"📅 <b>Дата:</b> {survey[2]}\n"
-        f"⭐ <b>Средний балл:</b> {survey[3]}\n\n"
+        f"📋 <b>Тип анкеты:</b> {survey[9]}\n"
+        f"⭐ <b>Средний балл:</b> {survey[3]}\n"
+        f"🔧 <b>Hard skills:</b> {survey[10] if survey[10] is not None else '-'}\n"
+        f"🤝 <b>Soft skills:</b> {survey[11] if survey[11] is not None else '-'}\n"
+        f"🎓 <b>Профессиональная пригодность:</b> {survey[12] if survey[12] is not None else '-'}\n\n"
         f"✅ <b>{OPEN_QUESTIONS[0]}</b>\n{survey[4]}\n\n"
         f"📈 <b>{OPEN_QUESTIONS[1]}</b>\n{survey[5]}\n\n"
         f"💬 <b>{OPEN_QUESTIONS[2]}</b>\n{survey[6]}"

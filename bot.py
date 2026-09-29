@@ -13,6 +13,7 @@ from handlers.start import router as start_router
 from handlers.registration import router as registration_router
 from handlers.survey import router as survey_router
 from handlers.specialist import router as specialist_router
+from handlers.student_feedback import router as student_feedback_router
 from fill_students import sync_reference_data
 from lms_sync import periodic_lms_sync
 
@@ -31,6 +32,7 @@ dp = Dispatcher()
 
 dp.include_router(start_router)
 dp.include_router(registration_router)
+dp.include_router(student_feedback_router)
 dp.include_router(survey_router)
 dp.include_router(specialist_router)
 

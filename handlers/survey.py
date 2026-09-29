@@ -26,16 +26,20 @@ from database import (
     get_surveys_by_mentor,
     get_survey,
     get_student,
-    get_enterprise
+    get_enterprise,
+    load_survey_questions,
 )
 
 from states import Survey
-from questions import QUESTIONS, OPEN_QUESTIONS
-
-from utils.survey_manager import (
-    get_question,
-    format_question
+from questions import (
+    OPEN_QUESTIONS,
+    get_questionnaire_title,
+    get_questions,
+    questionnaire_key_for_enterprise,
+    score_summary,
 )
+
+from utils.survey_manager import format_question
 from lms_sync import sync_survey
 
 router = Router()
@@ -54,7 +58,10 @@ def average_icon(avg):
     return "🔴"
 
 
-def student_confirmation_text(student, enterprise):
+def student_confirmation_text(student, enterprise, questionnaire_key):
+
+    questionnaire_title = get_questionnaire_title(questionnaire_key)
+    question_count = len(get_questions(questionnaire_key))
 
     return (
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -62,6 +69,7 @@ def student_confirmation_text(student, enterprise):
         f"👨‍🎓 <b>Студент</b>\n{student[1]}\n\n"
         f"👥 <b>Поток</b>\n{student[5]} поток\n\n"
         f"🏭 <b>Предприятие</b>\n{enterprise}\n\n"
+        f"📋 <b>Анкета</b>\n{questionnaire_title} · {question_count} вопросов\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Проверьте правильность выбора."
     )
@@ -129,13 +137,23 @@ async def choose_enterprise(
         await callback.answer("Данные не найдены.", show_alert=True)
         return
 
-    await state.update_data(enterprise=enterprise)
+    questionnaire_key = questionnaire_key_for_enterprise(enterprise)
+    if not questionnaire_key:
+        await callback.answer(
+            "Для этого предприятия новая анкета пока не настроена.",
+            show_alert=True,
+        )
+        return
+    await state.update_data(
+        enterprise=enterprise,
+        questionnaire_key=questionnaire_key,
+    )
     await state.set_state(Survey.confirm_student)
 
     await callback.answer()
 
     await callback.message.edit_text(
-        student_confirmation_text(student, enterprise),
+        student_confirmation_text(student, enterprise, questionnaire_key),
         parse_mode="HTML",
         reply_markup=start_survey_keyboard()
     )
@@ -215,6 +233,7 @@ async def open_survey(callback: CallbackQuery):
         return
 
     answers = json.loads(survey[4])
+    questions = load_survey_questions(survey[12], survey[13])
 
     text = (
         f"<b>📋 Анкета №{survey[0]}</b>\n\n"
@@ -222,12 +241,15 @@ async def open_survey(callback: CallbackQuery):
         f"👥 Поток: {survey[11]}\n"
         f"🏭 Предприятие: {survey[10]}\n"
         f"📅 Дата: {survey[3]}\n"
-        f"⭐ Средний балл: {survey[5]}\n\n"
+        f"⭐ Средний балл: {survey[5]}\n"
+        f"🔧 Hard skills: {survey[14] if survey[14] is not None else '-'}\n"
+        f"🤝 Soft skills: {survey[15] if survey[15] is not None else '-'}\n"
+        f"🎓 Профессиональная пригодность: {survey[16] if survey[16] is not None else '-'}\n\n"
         f"<b>Оценки:</b>\n"
     )
 
-    for i, mark in enumerate(answers, 1):
-        text += f"Вопрос {i}: {mark}\n"
+    for question, mark in zip(questions, answers):
+        text += f"{question.get('code', '—')}: {mark}\n"
 
     text += (
         f"\n<b>Лучшее:</b>\n{survey[6]}\n\n"
@@ -266,7 +288,10 @@ async def my_statistics(message: Message):
         f"📝 Заполнено анкет: <b>{stat['count']}</b>\n"
 
         f"⭐ Средний балл студентов: <b>{stat['average']}</b>\n"
-
+        f"🔧 Hard skills: <b>{stat['hard_average'] if stat['hard_average'] is not None else '-'}</b>\n"
+        f"🤝 Soft skills: <b>{stat['soft_average'] if stat['soft_average'] is not None else '-'}</b>\n"
+        f"🎓 Профессиональная пригодность: <b>{stat['suitability_average'] if stat['suitability_average'] is not None else '-'}</b>\n\n"
+        f"CT Assembly: <b>{stat['ct_assembly_count']}</b> · CT Agro: <b>{stat['ct_agro_count']}</b>\n\n"
         f"📅 Последняя анкета:\n"
         f"{stat['last_date']}"
     )
@@ -284,7 +309,8 @@ async def my_statistics(message: Message):
 async def about(message: Message):
 
     await message.answer(
-        "🤖 Система анкетирования наставников\nВерсия 1.0"
+        "🤖 Система анкетирования наставников\n"
+        "Версия 2.1 · Анкеты CT Assembly / CT Agro и отзывы студентов"
     )
 
 
@@ -350,8 +376,13 @@ async def start_survey(
 
     await state.set_state(Survey.answering)
 
+    data = await state.get_data()
+    questionnaire_key = data.get("questionnaire_key")
+    if questionnaire_key not in {"ct_assembly", "ct_agro"}:
+        await callback.answer("Сначала выберите CT Assembly или CT Agro.", show_alert=True)
+        return
     await callback.message.edit_text(
-        format_question(0),
+        format_question(questionnaire_key, 0),
         parse_mode="HTML",
         reply_markup=marks_keyboard()
     )
@@ -417,6 +448,8 @@ async def next_question(callback: CallbackQuery, state: FSMContext):
 
     answers = data["answers"]
     answers.append(mark)
+    questionnaire_key = data.get("questionnaire_key")
+    questions = get_questions(questionnaire_key)
 
     question = data["question"] + 1
 
@@ -425,7 +458,7 @@ async def next_question(callback: CallbackQuery, state: FSMContext):
         question=question
     )
 
-    if question >= len(QUESTIONS):
+    if question >= len(questions):
 
         await callback.message.edit_text(f"✍️ {OPEN_QUESTIONS[0]}")
         await state.set_state(Survey.best)
@@ -433,7 +466,7 @@ async def next_question(callback: CallbackQuery, state: FSMContext):
         return
 
     await callback.message.edit_text(
-    format_question(question),
+    format_question(questionnaire_key, question),
     reply_markup=marks_keyboard(),
     parse_mode="HTML"
 )
@@ -469,7 +502,10 @@ async def finish(message: Message, state: FSMContext):
     data = await state.get_data()
 
     answers = data["answers"]
-    average = round(sum(answers) / len(answers), 2)
+    questionnaire_key = data.get("questionnaire_key")
+    questions = get_questions(questionnaire_key)
+    summary = score_summary(questions, answers)
+    average = summary["average"]
 
     mentor_id = get_mentor_id(message.from_user.id)
 
@@ -482,7 +518,12 @@ async def finish(message: Message, state: FSMContext):
         best=data["best"],
         improve=data["improve"],
         recommendation=data["recommendation"],
-        survey_date=datetime.now().strftime("%d.%m.%Y %H:%M")
+        survey_date=datetime.now().strftime("%d.%m.%Y %H:%M"),
+        questionnaire_key=questionnaire_key,
+        questions=questions,
+        hard_average=summary["hard_average"],
+        soft_average=summary["soft_average"],
+        suitability_score=summary["suitability_score"],
     )
 
     # Сохранение анкеты в боте всегда остаётся основным действием.
@@ -506,6 +547,10 @@ async def finish(message: Message, state: FSMContext):
 
         f"{icon} <b>Средний балл</b>\n"
         f"{average:.2f}\n\n"
+
+        f"🔧 <b>Hard skills:</b> {summary['hard_average'] if summary['hard_average'] is not None else '-'}\n"
+        f"🤝 <b>Soft skills:</b> {summary['soft_average'] if summary['soft_average'] is not None else '-'}\n"
+        f"🎓 <b>Профессиональная пригодность:</b> {summary['suitability_score'] if summary['suitability_score'] is not None else '-'}\n\n"
 
         f"📅 <b>Дата</b>\n"
         f"{datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
