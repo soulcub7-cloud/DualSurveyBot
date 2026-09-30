@@ -1,9 +1,11 @@
 import sqlite3
+from contextlib import closing
 import json
 import os
 from pathlib import Path
 
 from questions import get_questions
+from config import ADMIN_ID, SPECIALIST_ID
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = os.getenv(
@@ -540,35 +542,32 @@ def get_surveys_count(mentor_id):
 
 
 create_tables()
+def can_manage_access(telegram_id):
+    """Only configured bot owners may appoint specialists."""
+    return telegram_id > 0 and telegram_id in {ADMIN_ID, SPECIALIST_ID}
+
+
 def get_mentor_role(telegram_id):
-    conn = get_connection()
-    cursor = conn.cursor()
+    if can_manage_access(telegram_id):
+        return "specialist"
+    with closing(get_connection()) as conn:
+        row = conn.execute("SELECT role FROM mentors WHERE telegram_id=?", (telegram_id,)).fetchone()
+    return "specialist" if row and row[0] in {"admin", "specialist"} else "mentor"
 
-    cursor.execute("""
-        SELECT role
-        FROM mentors
-        WHERE telegram_id=?
-    """, (telegram_id,))
 
-    result = cursor.fetchone()
-    conn.close()
+def is_specialist(telegram_id):
+    return get_mentor_role(telegram_id) == "specialist"
 
-    if result:
-        return result[0]
 
-    return "mentor"
 def set_specialist(telegram_id):
-    conn = get_connection()
-    cursor = conn.cursor()
+    if telegram_id <= 0:
+        return False
+    with closing(get_connection()) as conn:
+        result = conn.execute("UPDATE mentors SET role='specialist' WHERE telegram_id=?", (telegram_id,))
+        conn.commit()
+        return result.rowcount == 1
 
-    cursor.execute("""
-        UPDATE mentors
-        SET role='specialist'
-        WHERE telegram_id=?
-    """, (telegram_id,))
 
-    conn.commit()
-    conn.close()
 def migrate():
     conn = get_connection()
     cursor = conn.cursor()
@@ -680,12 +679,6 @@ def migrate():
 
 create_tables()
 migrate()
-SPECIALIST_ID = int(os.getenv("SPECIALIST_ID", "0"))
-
-def get_mentor_role(telegram_id):
-    if telegram_id == SPECIALIST_ID:
-        return "specialist"
-    return "mentor"
 def get_all_surveys_for_excel():
 
     conn = get_connection()

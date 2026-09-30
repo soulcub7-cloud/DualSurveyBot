@@ -2,7 +2,7 @@ import html
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile
-from config import ADMIN_ID, SPECIALIST_ID
+from database import is_specialist
 from questions import OPEN_QUESTIONS
 from database import get_survey_by_id
 from database import get_extended_statistics, get_statistics
@@ -31,9 +31,8 @@ from keyboards import (
 )
 
 router = Router()
-PRIVILEGED_IDS = {identifier for identifier in (ADMIN_ID, SPECIALIST_ID) if identifier}
-router.message.filter(lambda message: message.from_user.id in PRIVILEGED_IDS)
-router.callback_query.filter(lambda callback: callback.from_user.id in PRIVILEGED_IDS)
+router.message.filter(lambda message: bool(message.from_user) and is_specialist(message.from_user.id))
+router.callback_query.filter(lambda callback: is_specialist(callback.from_user.id))
 
 
 # =====================================================
@@ -47,7 +46,7 @@ async def show_specialist_menu(message: Message):
         "👨‍💼 <b>Кабинет специалиста</b>\n\n"
         "Выберите раздел:",
         parse_mode="HTML",
-        reply_markup=specialist_panel_keyboard()
+        reply_markup=specialist_panel_keyboard(message.from_user.id)
     )
 
 
@@ -220,7 +219,7 @@ async def callback_mentor_feedback(callback: CallbackQuery):
     if not records:
         await callback.message.edit_text(
             "📭 Отзывов студентов о наставниках пока нет.",
-            reply_markup=specialist_panel_keyboard(),
+            reply_markup=specialist_panel_keyboard(callback.from_user.id),
         )
         return
     await callback.message.edit_text(
@@ -247,7 +246,7 @@ async def callback_feedback_statistics(callback: CallbackQuery):
             f"{item['feedback_count']} отзыв(а) · {item['average']}/5\n\n"
         )
     await callback.answer()
-    await callback.message.edit_text(text[:4090], parse_mode="HTML", reply_markup=specialist_panel_keyboard())
+    await callback.message.edit_text(text[:4090], parse_mode="HTML", reply_markup=specialist_panel_keyboard(callback.from_user.id))
 
 
 @router.callback_query(F.data.regexp(r"^sp_feedback_\d+$"))
@@ -494,7 +493,7 @@ async def callback_back_specialist(callback: CallbackQuery):
         "👨‍💼 <b>Кабинет специалиста</b>\n\n"
         "Выберите раздел:",
         parse_mode="HTML",
-        reply_markup=specialist_panel_keyboard()
+        reply_markup=specialist_panel_keyboard(callback.from_user.id)
     )
 
 # =====================================================

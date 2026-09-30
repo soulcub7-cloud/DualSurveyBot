@@ -9,6 +9,7 @@ from database import (
     get_mentor_name,
     get_student_by_telegram,
     mentor_exists,
+    is_specialist,
     student_exists,
 )
 
@@ -19,6 +20,13 @@ router = Router()
 async def start(message: Message, state: FSMContext):
 
     telegram_id = message.from_user.id
+    await state.clear()
+    if is_specialist(telegram_id):
+        await message.answer(
+            "Здравствуйте! Доступ к кабинету специалиста включён. Выберите действие:",
+            reply_markup=main_menu_builder(telegram_id),
+        )
+        return
 
     if student_exists(telegram_id):
         student = get_student_by_telegram(telegram_id)

@@ -5,7 +5,7 @@ from aiogram.types import (
     InlineKeyboardButton
 )
 
-from database import get_streams, get_students_by_stream, get_mentor_role
+from database import get_streams, get_students_by_stream, get_mentor_role, can_manage_access
 
 
 # ============================
@@ -186,10 +186,10 @@ specialist_keyboard = ReplyKeyboardMarkup(
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
-def specialist_panel_keyboard():
+def specialist_panel_keyboard(telegram_id=0):
 
     return InlineKeyboardMarkup(
-        inline_keyboard=[
+        inline_keyboard=([[InlineKeyboardButton(text="🔐 Доступ к кабинету", callback_data="access_list_0")]] if can_manage_access(telegram_id) else []) + [
             [
                 InlineKeyboardButton(
                     text="📋 Все анкеты",

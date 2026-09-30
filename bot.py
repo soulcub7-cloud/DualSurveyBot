@@ -9,6 +9,7 @@ from config import BOT_TOKEN
 # РОУТЕРЫ
 # ============================
 
+from handlers.access import router as access_router
 from handlers.start import router as start_router
 from handlers.registration import router as registration_router
 from handlers.survey import router as survey_router
@@ -30,6 +31,7 @@ dp = Dispatcher()
 # ПОДКЛЮЧЕНИЕ РОУТЕРОВ
 # ============================
 
+dp.include_router(access_router)
 dp.include_router(start_router)
 dp.include_router(registration_router)
 dp.include_router(student_feedback_router)

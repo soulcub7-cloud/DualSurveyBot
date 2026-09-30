@@ -310,7 +310,7 @@ async def about(message: Message):
 
     await message.answer(
         "🤖 Система анкетирования наставников\n"
-        "Версия 2.1.2 · Анкеты CT Assembly / CT Agro и отзывы студентов"
+        "Версия 2.1.3 · Анкеты CT Assembly / CT Agro и отзывы студентов"
     )
 
 
