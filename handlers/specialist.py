@@ -355,15 +355,6 @@ async def callback_export(callback):
         document=document,
         caption="📊 Отчет успешно сформирован."
     ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
-@router.message(F.text == "🔙 Главное меню")
-async def back_to_menu(message: Message):
-
-    await message.answer(
-        "Главное меню",
-        reply_markup=main_menu_builder(message.from_user.id)
-    )
-
-
 # =====================================================
 # ПРОСМОТР АНКЕТЫ
 # =====================================================
@@ -486,18 +477,6 @@ async def callback_confirm_delete(callback: CallbackQuery):
 # =====================================================
 # НАЗАД В КАБИНЕТ СПЕЦИАЛИСТА
 # =====================================================
-
-@router.callback_query(F.data == "back_specialist")
-async def callback_back_specialist(callback: CallbackQuery):
-
-    await callback.answer()
-
-    await callback.message.edit_text(
-        "👨‍💼 <b>Кабинет специалиста</b>\n\n"
-        "Выберите раздел:",
-        parse_mode="HTML",
-        reply_markup=specialist_panel_keyboard(callback.from_user.id)
-    )
 
 # =====================================================
 # EXCEL ОДНОЙ АНКЕТЫ

@@ -49,6 +49,7 @@ def student_menu_builder():
             [KeyboardButton(text="ℹ️ О программе")],
         ],
         resize_keyboard=True,
+        is_persistent=True,
         input_field_placeholder="Выберите действие...",
     )
 
@@ -75,6 +76,7 @@ def main_menu_builder(telegram_id):
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
         resize_keyboard=True,
+        is_persistent=True,
         input_field_placeholder="Выберите действие..."
     )
 
