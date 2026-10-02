@@ -158,12 +158,28 @@ def score_summary(questions: list[dict], answers: list[int]) -> dict:
     for question, answer in zip(questions, answers):
         section = question.get("section", "soft")
         if section in grouped:
-            grouped[section].append(int(answer))
+            grouped[section].extend([int(answer)] if answer is not None else [])
 
     competency_scores = grouped["hard"] + grouped["soft"]
     return {
-        "average": round(sum(competency_scores) / len(competency_scores), 2) if competency_scores else 0,
+        "average": round(sum(competency_scores) / len(competency_scores), 2) if competency_scores else None,
         "hard_average": round(sum(grouped["hard"]) / len(grouped["hard"]), 2) if grouped["hard"] else None,
         "soft_average": round(sum(grouped["soft"]) / len(grouped["soft"]), 2) if grouped["soft"] else None,
         "suitability_score": grouped["suitability"][0] if grouped["suitability"] else None,
     }
+
+
+# The earlier catalog remains the fallback for records without snapshots.
+import json as _json
+from pathlib import Path as _Path
+HISTORICAL_QUESTIONNAIRES = {key: dict(value, questions=[dict(q) for q in value["questions"]]) for key, value in QUESTIONNAIRES.items()}
+_NEW_FORMS = _json.loads((_Path(__file__).with_name("questionnaires_v2.json")).read_text(encoding="utf-8"))
+for _key, _form in _NEW_FORMS.items():
+    QUESTIONNAIRES[_key]["questions"] = _form["questions"]
+NEW_OPEN_QUESTIONS = _NEW_FORMS["ct_assembly"]["open_questions"]
+SECTION_TITLES["suitability"] = "Профессиональная пригодность"
+
+def survey_comments(questions, best, improve, recommendation):
+    if any(q.get("form_version") == 2 for q in questions):
+        return list(zip(NEW_OPEN_QUESTIONS, [best, improve]))
+    return list(zip(OPEN_QUESTIONS, [best, improve, recommendation]))

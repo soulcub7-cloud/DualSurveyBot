@@ -63,9 +63,9 @@ def export_mentor_feedback_pdf(record):
         ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.extend([info_table, Spacer(1, 10), Paragraph("Оценки", HEADING)])
-    rows = [[_p("Код", HEADER), _p("Критерий", HEADER), _p("Оценка", HEADER)]]
-    for question, score in zip(record["questions"], record["ratings"]):
-        rows.append([_p(question.get("code", ""), CENTER), _p(question.get("text", "")), _p(f"{score}/5", CENTER)])
+    rows = [[_p("№", HEADER), _p("Критерий", HEADER), _p("Оценка", HEADER)]]
+    for number, (question, score) in enumerate(zip(record["questions"], record["ratings"]), 1):
+        rows.append([_p(number, CENTER), _p(question.get("text", "")), _p(f"{score}/5", CENTER)])
     table = LongTable(rows, colWidths=[22 * mm, 125 * mm, 23 * mm], repeatRows=1)
     style = [
         ("BACKGROUND", (0, 0), (-1, 0), DARK), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

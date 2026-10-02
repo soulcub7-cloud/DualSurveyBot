@@ -1,3 +1,7 @@
+from utils.message_pages import send_pages
+import html
+from questions import survey_comments
+from keyboards import back_keyboard
 from aiogram import Router, F
 from aiogram.types import (
     Message,
@@ -45,6 +49,7 @@ from lms_sync import sync_survey
 router = Router()
 
 def average_icon(avg):
+    if avg is None: return "⚪"
 
     if avg >= 4.5:
         return "🟢"
@@ -192,7 +197,7 @@ async def my_surveys(message: Message):
     surveys = get_surveys_by_mentor(mentor_id)
 
     if not surveys:
-        await message.answer("📭 У вас пока нет заполненных анкет.")
+        await message.answer("📭 У вас пока нет заполненных анкет.",reply_markup=back_keyboard())
         return
 
     keyboard = []
@@ -205,11 +210,12 @@ async def my_surveys(message: Message):
 
         keyboard.append([
             InlineKeyboardButton(
-                text=f"{student_name} | ⭐ {avg}",
+                text=f"{student_name} | ⭐ {avg if avg is not None else 'Не оценивалось'}",
                 callback_data=f"survey_{survey_id}"
             )
         ])
 
+    keyboard.append([InlineKeyboardButton(text="← Главное меню",callback_data="go_menu")])
     await message.answer(
         "📋 <b>Ваши анкеты:</b>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
@@ -228,8 +234,8 @@ async def open_survey(callback: CallbackQuery):
 
     survey = get_survey(survey_id)
 
-    if not survey:
-        await callback.message.answer("❌ Анкета не найдена.")
+    if not survey or survey[1] != get_mentor_id(callback.from_user.id):
+        await callback.message.answer("❌ Анкета не найдена.",reply_markup=back_keyboard())
         return
 
     answers = json.loads(survey[4])
@@ -241,7 +247,7 @@ async def open_survey(callback: CallbackQuery):
         f"👥 Поток: {survey[11]}\n"
         f"🏭 Предприятие: {survey[10]}\n"
         f"📅 Дата: {survey[3]}\n"
-        f"⭐ Средний балл: {survey[5]}\n"
+        f"⭐ Средний балл: {survey[5] if survey[5] is not None else 'Не оценивалось'}\n"
         f"🔧 Hard skills: {survey[14] if survey[14] is not None else '-'}\n"
         f"🤝 Soft skills: {survey[15] if survey[15] is not None else '-'}\n"
         f"🎓 Профессиональная пригодность: {survey[16] if survey[16] is not None else '-'}\n\n"
@@ -249,15 +255,11 @@ async def open_survey(callback: CallbackQuery):
     )
 
     for question, mark in zip(questions, answers):
-        text += f"{question.get('code', '—')}: {mark}\n"
+        text += f"{question.get('text', '—')}: {mark if mark is not None else 'Не оценивалось'}\n"
 
-    text += (
-        f"\n<b>Лучшее:</b>\n{survey[6]}\n\n"
-        f"<b>Что улучшить:</b>\n{survey[7]}\n\n"
-        f"<b>Рекомендации:</b>\n{survey[8]}"
-    )
-
-    await callback.message.answer(text, parse_mode="HTML")
+    for title, value in survey_comments(questions, survey[6], survey[7], survey[8]):
+        text += f"\n{html.escape(title)}\n{html.escape(value or '—')}\n"
+    await send_pages(callback.message, text, back_keyboard())
     await callback.answer()
 
 
@@ -268,7 +270,11 @@ async def open_survey(callback: CallbackQuery):
 @router.message(F.text == "📊 Статистика")
 async def my_statistics(message: Message):
 
-    from database import get_mentor_statistics
+    from database import get_mentor_statistics, is_specialist
+    if is_specialist(message.from_user.id):
+        from keyboards import statistics_keyboard
+        await message.answer("📊 Статистика",reply_markup=statistics_keyboard())
+        return
 
     stat = get_mentor_statistics(message.from_user.id)
 
@@ -276,7 +282,7 @@ async def my_statistics(message: Message):
 
         await message.answer(
             "❌ Вы не зарегистрированы."
-        )
+        ,reply_markup=back_keyboard())
         return
 
     text = (
@@ -287,7 +293,7 @@ async def my_statistics(message: Message):
 
         f"📝 Заполнено анкет: <b>{stat['count']}</b>\n"
 
-        f"⭐ Средний балл студентов: <b>{stat['average']}</b>\n"
+        f"⭐ Средний балл студентов: <b>{stat['average'] if stat['average'] is not None else 'Не оценивалось'}</b>\n"
         f"🔧 Hard skills: <b>{stat['hard_average'] if stat['hard_average'] is not None else '-'}</b>\n"
         f"🤝 Soft skills: <b>{stat['soft_average'] if stat['soft_average'] is not None else '-'}</b>\n"
         f"🎓 Профессиональная пригодность: <b>{stat['suitability_average'] if stat['suitability_average'] is not None else '-'}</b>\n\n"
@@ -299,7 +305,7 @@ async def my_statistics(message: Message):
     await message.answer(
         text,
         parse_mode="HTML"
-    )
+    ,reply_markup=back_keyboard())
 
 # =====================================================
 # О ПРОГРАММЕ
@@ -311,7 +317,7 @@ async def about(message: Message):
     await message.answer(
         "🤖 Система анкетирования наставников\n"
         "Версия 2.1.3 · Анкеты CT Assembly / CT Agro и отзывы студентов"
-    )
+    ,reply_markup=back_keyboard())
 
 
 # =====================================================
@@ -365,35 +371,9 @@ async def start_survey(
     callback: CallbackQuery,
     state: FSMContext
 ):
-    data = await state.get_data()
-    questionnaire_key = data.get("questionnaire_key")
-    if (
-        questionnaire_key not in {"ct_assembly", "ct_agro"}
-        or not data.get("student_id")
-        or not data.get("enterprise")
-    ):
-        await callback.answer(
-            "Данные выбора устарели. Начните новую анкету и повторите выбор.",
-            show_alert=True,
-        )
-        return
+    from handlers.assessment import begin
+    await begin(callback, state, 'survey')
 
-    # Сразу завершаем индикатор Telegram. Формирование первого вопроса и
-    # изменение сообщения выполняются после подтверждения callback.
-    await callback.answer()
-    await state.update_data(question=0, answers=[])
-    await state.set_state(Survey.answering)
-
-    await callback.message.edit_text(
-        format_question(questionnaire_key, 0),
-        parse_mode="HTML",
-        reply_markup=marks_keyboard()
-    )
-
-
-    # =====================================================
-# ВЫБРАТЬ ДРУГОГО СТУДЕНТА
-# =====================================================
 
 @router.callback_query(F.data == "back_students")
 async def back_students(
@@ -441,131 +421,3 @@ async def back_streams(callback: CallbackQuery, state: FSMContext):
 # ОТВЕТЫ
 # =====================================================
 
-@router.callback_query(Survey.answering, F.data.startswith("mark_"))
-async def next_question(callback: CallbackQuery, state: FSMContext):
-
-    mark = int(callback.data.split("_")[1])
-    data = await state.get_data()
-
-    answers = data["answers"]
-    answers.append(mark)
-    questionnaire_key = data.get("questionnaire_key")
-    questions = get_questions(questionnaire_key)
-
-    question = data["question"] + 1
-
-    await state.update_data(
-        answers=answers,
-        question=question
-    )
-
-    if question >= len(questions):
-
-        await callback.message.edit_text(f"✍️ {OPEN_QUESTIONS[0]}")
-        await state.set_state(Survey.best)
-        await callback.answer()
-        return
-
-    await callback.message.edit_text(
-    format_question(questionnaire_key, question),
-    reply_markup=marks_keyboard(),
-    parse_mode="HTML"
-)
-
-    await callback.answer()
-
-
-# =====================================================
-# ЛУЧШЕЕ / УЛУЧШИТЬ / РЕКОМЕНДАЦИИ
-# =====================================================
-
-@router.message(Survey.best)
-async def best(message: Message, state: FSMContext):
-    await state.update_data(best=message.text)
-    await message.answer(f"✍️ {OPEN_QUESTIONS[1]}")
-    await state.set_state(Survey.improve)
-
-
-@router.message(Survey.improve)
-async def improve(message: Message, state: FSMContext):
-    await state.update_data(improve=message.text)
-    await message.answer(f"✍️ {OPEN_QUESTIONS[2]}")
-    await state.set_state(Survey.recommendation)
-
-
-@router.message(Survey.recommendation)
-async def finish(message: Message, state: FSMContext):
-
-    await state.update_data(
-        recommendation=message.text
-    )
-
-    data = await state.get_data()
-
-    answers = data["answers"]
-    questionnaire_key = data.get("questionnaire_key")
-    questions = get_questions(questionnaire_key)
-    summary = score_summary(questions, answers)
-    average = summary["average"]
-
-    mentor_id = get_mentor_id(message.from_user.id)
-
-    survey_id = save_survey(
-        mentor_id=mentor_id,
-        student_id=data["student_id"],
-        enterprise=data["enterprise"],
-        answers=answers,
-        average=average,
-        best=data["best"],
-        improve=data["improve"],
-        recommendation=data["recommendation"],
-        survey_date=datetime.now().strftime("%d.%m.%Y %H:%M"),
-        questionnaire_key=questionnaire_key,
-        questions=questions,
-        hard_average=summary["hard_average"],
-        soft_average=summary["soft_average"],
-        suitability_score=summary["suitability_score"],
-    )
-
-    # Сохранение анкеты в боте всегда остаётся основным действием.
-    # Передача в LMS выполняется в фоне и не мешает наставнику продолжать работу.
-    asyncio.create_task(sync_survey(survey_id))
-
-    student = get_student(data["student_id"])
-
-    icon = average_icon(average)
-
-    text = (
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-
-        "✅ <b>Анкета успешно сохранена</b>\n\n"
-
-        f"👨‍🎓 <b>Студент</b>\n"
-        f"{student[1]}\n\n"
-
-        f"🏭 <b>Предприятие</b>\n"
-        f"{data['enterprise']}\n\n"
-
-        f"{icon} <b>Средний балл</b>\n"
-        f"{average:.2f}\n\n"
-
-        f"🔧 <b>Hard skills:</b> {summary['hard_average'] if summary['hard_average'] is not None else '-'}\n"
-        f"🤝 <b>Soft skills:</b> {summary['soft_average'] if summary['soft_average'] is not None else '-'}\n"
-        f"🎓 <b>Профессиональная пригодность:</b> {summary['suitability_score'] if summary['suitability_score'] is not None else '-'}\n\n"
-
-        f"📅 <b>Дата</b>\n"
-        f"{datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
-
-        "Спасибо за участие в оценке\n"
-        "практической подготовки!"
-
-        "\n\n━━━━━━━━━━━━━━━━━━━━━━"
-    )
-
-    await message.answer(
-        text,
-        parse_mode="HTML",
-        reply_markup=main_menu_builder(message.from_user.id)
-    )
-
-    await state.clear()

@@ -59,6 +59,7 @@ def _p(value, style=BODY):
 
 
 def _score_label(score):
+    if score is None: return "Не оценивалось"
     labels = {1: "1 · не проявляется", 2: "2 · слабо", 3: "3 · удовлетворительно", 4: "4 · хорошо", 5: "5 · отлично"}
     return labels.get(int(score), str(score))
 
@@ -117,7 +118,7 @@ def export_one_pdf(data):
 
     summary_rows = [
         [_p("Общий балл", HEADER), _p("Hard skills", HEADER), _p("Soft skills", HEADER), _p("Профпригодность", HEADER)],
-        [_p(f"{survey['average']:.2f}", BODY_CENTER), _p(survey["hard_average"], BODY_CENTER), _p(survey["soft_average"], BODY_CENTER), _p(survey["suitability_score"], BODY_CENTER)],
+        [_p((f"{survey['average']:.2f}" if survey["average"] is not None else "Не оценивалось"), BODY_CENTER), _p(survey["hard_average"], BODY_CENTER), _p(survey["soft_average"], BODY_CENTER), _p(survey["suitability_score"], BODY_CENTER)],
     ]
     summary = Table(summary_rows, colWidths=[42.5 * mm] * 4)
     summary.setStyle(TableStyle([
@@ -157,11 +158,7 @@ def export_one_pdf(data):
     story.append(scores)
 
     story.extend([Spacer(1, 12), Paragraph("Комментарии наставника", HEADING)])
-    for title, value in (
-        (OPEN_QUESTIONS[0], survey["best"]),
-        (OPEN_QUESTIONS[1], survey["improve"]),
-        (OPEN_QUESTIONS[2], survey["recommendation"]),
-    ):
+    for title, value in survey["comments"]:
         story.extend([_comment_block(title, value), Spacer(1, 7)])
 
     signature = Table(

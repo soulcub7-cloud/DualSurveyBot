@@ -1,3 +1,9 @@
+from utils.message_pages import send_pages
+from questions import survey_comments
+from database import load_survey_questions
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from keyboards import back_keyboard
+from keyboards import back_keyboard, statistics_keyboard, exports_keyboard
 import html
 
 from aiogram import Router, F
@@ -67,7 +73,7 @@ async def callback_all_surveys(callback: CallbackQuery):
 
         await callback.message.edit_text(
             "📭 Пока нет заполненных анкет."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
 
     await callback.message.edit_text(
@@ -95,7 +101,7 @@ async def callback_students(callback: CallbackQuery):
 
         await callback.message.edit_text(
             "Студентов пока нет."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
 
     text = "👨‍🎓 <b>Студенты</b>\n\n"
@@ -115,7 +121,7 @@ async def callback_students(callback: CallbackQuery):
     await callback.message.edit_text(
         text,
         parse_mode="HTML"
-    )
+    ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 
 
 # =====================================================
@@ -135,7 +141,7 @@ async def callback_mentors(callback: CallbackQuery):
 
         await callback.message.edit_text(
             "👨‍🏭 Наставники отсутствуют."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
 
     text = "👨‍🏭 <b>Наставники</b>\n\n"
@@ -155,7 +161,7 @@ async def callback_mentors(callback: CallbackQuery):
     await callback.message.edit_text(
         text,
         parse_mode="HTML"
-    )
+    ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 
 
 # =====================================================
@@ -205,7 +211,7 @@ async def callback_statistics(callback: CallbackQuery):
     await callback.message.edit_text(
         text,
         parse_mode="HTML"
-    )
+    ,reply_markup=back_keyboard("sp_stats_menu", "← Статистика"))
 
 
 # =====================================================
@@ -230,7 +236,7 @@ async def callback_mentor_feedback(callback: CallbackQuery):
     )
 
 
-@router.callback_query(F.data == "sp_feedback_statistics")
+@router.callback_query((F.data == "sp_feedback_statistics") | F.data.startswith("sp_fstats_page_"))
 async def callback_feedback_statistics(callback: CallbackQuery):
     stats = get_mentor_feedback_statistics()
     text = (
@@ -239,14 +245,20 @@ async def callback_feedback_statistics(callback: CallbackQuery):
         f"Оценено наставников: <b>{stats['mentor_count']}</b>\n"
         f"Средняя оценка: <b>{stats['average']}/5</b>\n\n"
     )
-    for item in stats["mentors"][:40]:
+    page = int(callback.data.rsplit("_",1)[1]) if callback.data.startswith("sp_fstats_page_") else 0
+    page = max(0, min(page, max(0, (len(stats["mentors"])-1)//8)))
+    for item in stats["mentors"][page*8:page*8+8]:
         text += (
-            f"• <b>{html.escape(item['mentor_name'])}</b>\n"
-            f"  {html.escape(item['enterprise'] or 'Предприятие не указано')} · "
+            f"• <b>{html.escape(item['mentor_name'][:150])}</b>\n"
+            f"  {html.escape((item['enterprise'] or 'Предприятие не указано')[:100])} · "
             f"{item['feedback_count']} отзыв(а) · {item['average']}/5\n\n"
         )
     await callback.answer()
-    await callback.message.edit_text(text[:4090], parse_mode="HTML", reply_markup=specialist_panel_keyboard(callback.from_user.id))
+    buttons = []
+    if page: buttons.append(InlineKeyboardButton(text="←", callback_data=f"sp_fstats_page_{page-1}"))
+    if (page+1)*8 < len(stats["mentors"]): buttons.append(InlineKeyboardButton(text="→", callback_data=f"sp_fstats_page_{page+1}"))
+    rows = ([buttons] if buttons else []) + [[InlineKeyboardButton(text="← Статистика",callback_data="sp_stats_menu")]]
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
 @router.callback_query(F.data.regexp(r"^sp_feedback_\d+$"))
@@ -255,10 +267,10 @@ async def callback_open_feedback(callback: CallbackQuery):
     record = get_mentor_feedback(feedback_id)
     await callback.answer()
     if not record:
-        await callback.message.edit_text("Отзыв не найден.")
+        await callback.message.edit_text("Отзыв не найден.",reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
     scores = " · ".join(
-        f"{question.get('code', index + 1)}: {score}"
+        f"{index + 1}: {score}"
         for index, (question, score) in enumerate(zip(record["questions"], record["ratings"]))
     )
     text = (
@@ -276,11 +288,7 @@ async def callback_open_feedback(callback: CallbackQuery):
         f"<b>Что улучшить:</b>\n{html.escape(record['weaknesses'] or '-')}\n\n"
         f"<b>Общий вывод:</b>\n{html.escape(record['conclusion'] or '-')}"
     )
-    await callback.message.edit_text(
-        text[:4090],
-        parse_mode="HTML",
-        reply_markup=mentor_feedback_view_keyboard(feedback_id),
-    )
+    await send_pages(callback.message, text, mentor_feedback_view_keyboard(feedback_id), edit=True)
 
 
 @router.callback_query(F.data == "sp_feedback_excel")
@@ -288,13 +296,13 @@ async def callback_feedback_excel_all(callback: CallbackQuery):
     records = get_all_mentor_feedback()
     await callback.answer()
     if not records:
-        await callback.message.answer("Отзывов для выгрузки пока нет.")
+        await callback.message.answer("Отзывов для выгрузки пока нет.",reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
     filename = export_mentor_feedback_excel(records)
     await callback.message.answer_document(
         document=FSInputFile(filename),
         caption="📊 Отзывы студентов о наставниках",
-    )
+    reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 
 
 @router.callback_query(F.data.regexp(r"^feedback_excel_\d+$"))
@@ -303,10 +311,10 @@ async def callback_feedback_excel_one(callback: CallbackQuery):
     record = get_mentor_feedback(feedback_id)
     await callback.answer()
     if not record:
-        await callback.message.answer("Отзыв не найден.")
+        await callback.message.answer("Отзыв не найден.",reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
     filename = export_mentor_feedback_excel([record], feedback_id)
-    await callback.message.answer_document(document=FSInputFile(filename), caption=f"📊 Отзыв №{feedback_id}")
+    await callback.message.answer_document(document=FSInputFile(filename), caption=f"📊 Отзыв №{feedback_id}",reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 
 
 @router.callback_query(F.data.regexp(r"^feedback_pdf_\d+$"))
@@ -315,10 +323,10 @@ async def callback_feedback_pdf_one(callback: CallbackQuery):
     record = get_mentor_feedback(feedback_id)
     await callback.answer()
     if not record:
-        await callback.message.answer("Отзыв не найден.")
+        await callback.message.answer("Отзыв не найден.",reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
     filename = export_mentor_feedback_pdf(record)
-    await callback.message.answer_document(document=FSInputFile(filename), caption=f"📄 Отзыв №{feedback_id}")
+    await callback.message.answer_document(document=FSInputFile(filename), caption=f"📄 Отзыв №{feedback_id}",reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 
 
 # =====================================================
@@ -336,7 +344,7 @@ async def callback_export(callback):
 
         await callback.message.edit_text(
             "❌ В базе данных пока нет анкет."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
 
     filename = export_surveys_to_excel(data)
@@ -346,7 +354,7 @@ async def callback_export(callback):
     await callback.message.answer_document(
         document=document,
         caption="📊 Отчет успешно сформирован."
-    )
+    ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 @router.message(F.text == "🔙 Главное меню")
 async def back_to_menu(message: Message):
 
@@ -386,7 +394,7 @@ async def callback_open_survey(callback: CallbackQuery):
             COALESCE(surveys.questionnaire_key, 'legacy'),
             surveys.hard_average,
             surveys.soft_average,
-            surveys.suitability_score
+            surveys.suitability_score, surveys.questions_json
         FROM surveys
         JOIN students
             ON students.id = surveys.student_id
@@ -405,7 +413,7 @@ async def callback_open_survey(callback: CallbackQuery):
 
         await callback.message.edit_text(
             "❌ Анкета не найдена."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
 
     text = (
@@ -416,20 +424,15 @@ async def callback_open_survey(callback: CallbackQuery):
         f"👨‍🏭 <b>Наставник:</b> {survey[1]}\n"
         f"📅 <b>Дата:</b> {survey[2]}\n"
         f"📋 <b>Тип анкеты:</b> {survey[9]}\n"
-        f"⭐ <b>Средний балл:</b> {survey[3]}\n"
+        f"⭐ <b>Средний балл:</b> {survey[3] if survey[3] is not None else 'Не оценивалось'}\n"
         f"🔧 <b>Hard skills:</b> {survey[10] if survey[10] is not None else '-'}\n"
         f"🤝 <b>Soft skills:</b> {survey[11] if survey[11] is not None else '-'}\n"
         f"🎓 <b>Профессиональная пригодность:</b> {survey[12] if survey[12] is not None else '-'}\n\n"
-        f"✅ <b>{OPEN_QUESTIONS[0]}</b>\n{survey[4]}\n\n"
-        f"📈 <b>{OPEN_QUESTIONS[1]}</b>\n{survey[5]}\n\n"
-        f"💬 <b>{OPEN_QUESTIONS[2]}</b>\n{survey[6]}"
     )
-
-    await callback.message.edit_text(
-    text,
-    parse_mode="HTML",
-    reply_markup=survey_view_keyboard(survey_id)
-)
+    questions = load_survey_questions(survey[9], survey[13])
+    for title, value in survey_comments(questions, survey[4], survey[5], survey[6]):
+        text += f"\n{html.escape(title)}\n{html.escape(value or '—')}\n"
+    await send_pages(callback.message, text, survey_view_keyboard(survey_id), edit=True)
 
 # =====================================================
 # ЗАПРОС НА УДАЛЕНИЕ
@@ -479,7 +482,7 @@ async def callback_confirm_delete(callback: CallbackQuery):
 
         await callback.message.edit_text(
             "📭 Анкет больше нет."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 # =====================================================
 # НАЗАД В КАБИНЕТ СПЕЦИАЛИСТА
 # =====================================================
@@ -513,7 +516,7 @@ async def callback_excel(callback: CallbackQuery):
 
         await callback.message.answer(
             "❌ Анкета не найдена."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
 
     filename = export_one_survey(survey)
@@ -523,7 +526,7 @@ async def callback_excel(callback: CallbackQuery):
     await callback.message.answer_document(
         document=document,
         caption=f"📊 Анкета №{survey_id}"
-    )
+    ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
 
 # =====================================================
 # PDF ОДНОЙ АНКЕТЫ
@@ -542,7 +545,7 @@ async def callback_pdf(callback: CallbackQuery):
 
         await callback.message.answer(
             "❌ Анкета не найдена."
-        )
+        ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
         return
 
     filename = export_one_pdf(survey)
@@ -552,4 +555,14 @@ async def callback_pdf(callback: CallbackQuery):
     await callback.message.answer_document(
         document=document,
         caption=f"📄 Анкета №{survey_id}"
-    )
+    ,reply_markup=back_keyboard("back_specialist", "← Кабинет специалиста"))
+
+@router.callback_query(F.data == "sp_stats_menu")
+async def stats_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text("📊 Статистика",reply_markup=statistics_keyboard())
+
+@router.callback_query(F.data == "sp_exports_menu")
+async def exports_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text("📥 Экспорт в Excel",reply_markup=exports_keyboard())

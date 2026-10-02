@@ -24,6 +24,7 @@ def _style_header(row):
 
 
 def _score_fill(score):
+    if score is None: return "EEEEEE"
     if score <= 2:
         return "F8D7DA"
     if score == 3:
@@ -92,7 +93,7 @@ def export_one_survey(data):
             response.get("code", "-"),
             SECTION_TITLES.get(section, section),
             response.get("text", ""),
-            response["score"],
+            response["score"] if response["score"] is not None else "Не оценивалось",
         ])
         row = sheet[sheet.max_row]
         for cell in row:
@@ -103,15 +104,11 @@ def export_one_survey(data):
         row[2].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         row[4].alignment = Alignment(horizontal="center", vertical="center")
         row[4].font = Font(bold=True)
-        row[4].fill = PatternFill("solid", fgColor=_score_fill(int(response["score"])))
-        sheet.row_dimensions[sheet.max_row].height = 34
+        row[4].fill = PatternFill("solid", fgColor=_score_fill(response["score"]))
+        sheet.row_dimensions[sheet.max_row].height = max(34, 15 * ((len(response.get("text", "")) + 65) // 66))
 
     last_criteria_row = sheet.max_row
-    comments = [
-        (OPEN_QUESTIONS[0], survey["best"]),
-        (OPEN_QUESTIONS[1], survey["improve"]),
-        (OPEN_QUESTIONS[2], survey["recommendation"]),
-    ]
+    comments = survey["comments"]
     for title, text in comments:
         sheet.append([])
         sheet.append([title])
@@ -126,7 +123,7 @@ def export_one_survey(data):
         body = sheet.cell(sheet.max_row, 1)
         body.alignment = Alignment(vertical="top", wrap_text=True)
         body.border = BORDER
-        sheet.row_dimensions[sheet.max_row].height = 48
+        sheet.row_dimensions[sheet.max_row].height = min(409, max(48, 15 * ((len(text or "") + 120) // 121)))
 
     widths = {"A": 10, "B": 18, "C": 24, "D": 82, "E": 16}
     for column, width in widths.items():

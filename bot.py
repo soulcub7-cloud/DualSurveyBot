@@ -2,6 +2,9 @@ import asyncio
 from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import SimpleEventIsolation
+from handlers.assessment import router as assessment_router
+from handlers.navigation import router as navigation_router
 
 from config import BOT_TOKEN
 
@@ -24,7 +27,7 @@ from lms_sync import periodic_lms_sync
 # ============================
 
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(events_isolation=SimpleEventIsolation())
 
 
 # ============================
@@ -34,6 +37,8 @@ dp = Dispatcher()
 dp.include_router(access_router)
 dp.include_router(start_router)
 dp.include_router(registration_router)
+dp.include_router(navigation_router)
+dp.include_router(assessment_router)
 dp.include_router(student_feedback_router)
 dp.include_router(survey_router)
 dp.include_router(specialist_router)

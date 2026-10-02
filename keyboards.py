@@ -96,6 +96,7 @@ def streams_keyboard():
             )
         ])
 
+    keyboard.append([InlineKeyboardButton(text="← Главное меню",callback_data="go_menu")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -158,6 +159,7 @@ def mentor_directory_keyboard(mentors):
                 callback_data=f"feedback_mentor_{mentor['lms_id']}",
             )
         ])
+    keyboard.append([InlineKeyboardButton(text="← Главное меню",callback_data="go_menu")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -186,60 +188,30 @@ specialist_keyboard = ReplyKeyboardMarkup(
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
-def specialist_panel_keyboard(telegram_id=0):
+def back_keyboard(target="go_menu", label="← Главное меню"):
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label,callback_data=target)]])
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=([[InlineKeyboardButton(text="🔐 Доступ к кабинету", callback_data="access_list_0")]] if can_manage_access(telegram_id) else []) + [
-            [
-                InlineKeyboardButton(
-                    text="📋 Все анкеты",
-                    callback_data="sp_all_surveys"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👨‍🎓 Студенты",
-                    callback_data="sp_students"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👨‍🏭 Наставники",
-                    callback_data="sp_mentors"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📊 Статистика",
-                    callback_data="sp_statistics"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🗣 Отзывы студентов",
-                    callback_data="sp_mentor_feedback"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📈 Статистика отзывов",
-                    callback_data="sp_feedback_statistics"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📥 Экспорт Excel",
-                    callback_data="sp_export_excel"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📥 Отзывы Excel",
-                    callback_data="sp_feedback_excel"
-                )
-            ]
-        ]
-    )
+
+def statistics_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Общая статистика",callback_data="sp_statistics")],
+        [InlineKeyboardButton(text="Статистика отзывов",callback_data="sp_feedback_statistics")],
+        [InlineKeyboardButton(text="← Кабинет специалиста",callback_data="back_specialist")]])
+
+
+def exports_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Оценки наставников — Excel",callback_data="sp_export_excel")],
+        [InlineKeyboardButton(text="Отзывы студентов — Excel",callback_data="sp_feedback_excel")],
+        [InlineKeyboardButton(text="← Кабинет специалиста",callback_data="back_specialist")]])
+
+
+def specialist_panel_keyboard(telegram_id=0):
+    items=[("📋 Все анкеты","sp_all_surveys"),("👨‍🎓 Студенты","sp_students"),("👨‍🏭 Наставники","sp_mentors"),("📊 Статистика","sp_stats_menu"),("🗣 Отзывы студентов","sp_mentor_feedback"),("📥 Экспорт","sp_exports_menu")]
+    if can_manage_access(telegram_id): items.insert(0,("🔐 Доступ к кабинету","access_list_0"))
+    items.append(("← Главное меню","go_menu"))
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t,callback_data=c)] for t,c in items])
+
 # ==========================================
 # СПИСОК АНКЕТ
 # ==========================================

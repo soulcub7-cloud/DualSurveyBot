@@ -69,22 +69,17 @@ def export_surveys_to_excel(data):
                 survey["id"], survey["date"], survey["student"], survey["enterprise"],
                 survey["mentor"], survey["questionnaire_title"], response.get("code", "-"),
                 SECTION_TITLES.get(response.get("section"), response.get("section", "-")),
-                response.get("text", ""), response["score"],
+                response.get("text", ""), response["score"] if response["score"] is not None else "Не оценивалось",
             ])
     _header(scores)
     _body(scores, centered_columns=(1, 7, 8, 10))
     _set_widths(scores, [12, 20, 32, 22, 30, 20, 18, 18, 82, 12])
 
     comments = workbook.create_sheet("Комментарии")
-    comments.append([
-        "№ анкеты", "Дата", "Студент", "Предприятие", "Наставник",
-        OPEN_QUESTIONS[0], OPEN_QUESTIONS[1], OPEN_QUESTIONS[2],
-    ])
+    comments.append(["№ анкеты", "Дата", "Студент", "Предприятие", "Наставник", "Вопрос", "Ответ"])
     for survey in surveys:
-        comments.append([
-            survey["id"], survey["date"], survey["student"], survey["enterprise"],
-            survey["mentor"], survey["best"], survey["improve"], survey["recommendation"],
-        ])
+        for title, value in survey["comments"]:
+            comments.append([survey["id"],survey["date"],survey["student"],survey["enterprise"],survey["mentor"],title,value])
     _header(comments)
     _body(comments, centered_columns=(1,))
     _set_widths(comments, [12, 20, 32, 22, 30, 55, 55, 55])

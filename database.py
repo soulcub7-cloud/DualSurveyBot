@@ -358,7 +358,8 @@ def load_survey_questions(questionnaire_key, questions_json=None):
                 return loaded
         except (TypeError, json.JSONDecodeError):
             pass
-    return get_questions(questionnaire_key or "legacy")
+    from questions import HISTORICAL_QUESTIONNAIRES
+    return [dict(q) for q in HISTORICAL_QUESTIONNAIRES.get(questionnaire_key or "legacy", HISTORICAL_QUESTIONNAIRES["legacy"])["questions"]]
 
 
 def build_survey_responses(questionnaire_key, questions_json, answers_json):
@@ -374,7 +375,7 @@ def build_survey_responses(questionnaire_key, questions_json, answers_json):
                 "skill_code": question.get("code"),
                 "question": question.get("text", ""),
                 "section": question.get("section", "soft"),
-                "score": int(score),
+                "score": int(score) if score is not None else None,
             }
         )
     return responses
@@ -987,7 +988,7 @@ def get_mentor_statistics(telegram_id):
     return {
         "mentor": mentor_name,
         "count": stats[0] or 0,
-        "average": stats[1] or 0,
+        "average": stats[1],
         "last_date": stats[2] or "-",
         "hard_average": stats[3],
         "soft_average": stats[4],
@@ -1199,8 +1200,6 @@ def get_statistics():
     cursor.execute("SELECT AVG(average) FROM surveys")
     avg = cursor.fetchone()[0]
 
-    if avg is None:
-        avg = 0
 
     # Отлично
     cursor.execute("""
@@ -1242,7 +1241,7 @@ def get_statistics():
         students,
         mentors,
         surveys,
-        round(avg, 2),
+        round(avg, 2) if avg is not None else None,
         excellent,
         good,
         satisfactory,
@@ -1607,7 +1606,7 @@ def get_mentor_feedback_for_lms_sync(feedback_id=None):
                     {
                         "code": question.get("code", f"MF-{index + 1:02d}"),
                         "question": question.get("text", ""),
-                        "score": int(score),
+                        "score": int(score) if score is not None else None,
                     }
                     for index, (question, score) in enumerate(
                         zip(record["questions"], record["ratings"])

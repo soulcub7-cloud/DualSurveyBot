@@ -68,13 +68,13 @@ def export_mentor_feedback_excel(records, feedback_id=None):
     _fit(summary, {"A": 8, "B": 20, "C": 32, "D": 20, "E": 18, "F": 24, "G": 34, "H": 16, "I": 34, "J": 12, "K": 32, "L": 10})
 
     ratings = workbook.create_sheet("Оценки")
-    ratings.append(["№ отзыва", "Дата", "Наставник", "Студент", "Код", "Критерий", "Оценка"])
+    ratings.append(["№ отзыва", "Дата", "Наставник", "Студент", "№ вопроса", "Критерий", "Оценка"])
     _header(ratings[1])
     for record in records:
-        for question, score in zip(record["questions"], record["ratings"]):
+        for number, (question, score) in enumerate(zip(record["questions"], record["ratings"]), 1):
             ratings.append([
                 record["id"], record["submitted_at"], record["mentor_name"],
-                record["student_name"], question.get("code", ""),
+                record["student_name"], number,
                 question.get("text", ""), int(score),
             ])
             _body(ratings[ratings.max_row])

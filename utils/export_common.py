@@ -2,7 +2,7 @@ import json
 import re
 
 from database import load_survey_questions
-from questions import get_questionnaire_title, score_summary
+from questions import get_questionnaire_title, score_summary, survey_comments
 
 
 def unpack_survey(data):
@@ -24,7 +24,8 @@ def unpack_survey(data):
         "enterprise": data[5] or "-",
         "mentor": data[6],
         "answers": answers,
-        "average": float(data[8] or 0),
+        "average": float(data[8]) if data[8] is not None else None,
+        "comments": survey_comments(questions, data[9], data[10], data[11]),
         "best": data[9] or "-",
         "improve": data[10] or "-",
         "recommendation": data[11] or "-",
@@ -35,7 +36,7 @@ def unpack_survey(data):
         "soft_average": soft_average,
         "suitability_score": suitability_score,
         "responses": [
-            {**question, "score": int(score)}
+            {**question, "score": int(score) if score is not None else None}
             for question, score in zip(questions, answers)
         ],
     }

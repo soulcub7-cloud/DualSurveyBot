@@ -1,3 +1,5 @@
+from utils.message_pages import send_pages
+from keyboards import back_keyboard
 import asyncio
 import html
 from datetime import datetime, timedelta, timezone
@@ -94,6 +96,7 @@ async def choose_feedback_mentor(callback: CallbackQuery, state: FSMContext):
         f"👨‍🏭 Наставник: <b>{html.escape(mentor['full_name'])}</b>\n"
         f"🏭 Предприятие: <b>{html.escape(mentor.get('enterprise') or 'Не указано')}</b>\n\n"
         "Введите название учебного модуля.",
+        reply_markup=back_keyboard("feedback_back_mentors", "← К наставникам"),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -133,98 +136,15 @@ async def feedback_back_mentors(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(MentorFeedback.confirming, F.data == "feedback_start")
 async def start_feedback_questions(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(question=0, ratings=[], open_answers={})
-    await state.set_state(MentorFeedback.answering)
-    await callback.message.edit_text(
-        format_mentor_feedback_question(0),
-        parse_mode="HTML",
-        reply_markup=marks_keyboard(),
-    )
-    await callback.answer()
-
-
-@router.callback_query(MentorFeedback.answering, F.data.startswith("mark_"))
-async def next_feedback_question(callback: CallbackQuery, state: FSMContext):
-    score = int(callback.data.removeprefix("mark_"))
-    data = await state.get_data()
-    ratings = list(data.get("ratings", []))
-    ratings.append(score)
-    question_index = int(data.get("question", 0)) + 1
-    await state.update_data(ratings=ratings, question=question_index)
-    if question_index >= len(MENTOR_FEEDBACK_QUESTIONS):
-        key, question = MENTOR_FEEDBACK_OPEN_QUESTIONS[0]
-        await state.update_data(open_index=0, current_open_key=key)
-        await state.set_state(MentorFeedback.open_answer)
-        await callback.message.edit_text(f"✍️ <b>Развернутый ответ 1 из {len(MENTOR_FEEDBACK_OPEN_QUESTIONS)}</b>\n\n{question}", parse_mode="HTML")
-        await callback.answer()
-        return
-    await callback.message.edit_text(
-        format_mentor_feedback_question(question_index),
-        parse_mode="HTML",
-        reply_markup=marks_keyboard(),
-    )
-    await callback.answer()
-
-
-@router.message(MentorFeedback.open_answer)
-async def save_feedback_open_answer(message: Message, state: FSMContext):
-    answer = (message.text or "").strip()
-    if not answer:
-        await message.answer("Ответьте текстом. Если добавить нечего, напишите «Нет».")
-        return
-    data = await state.get_data()
-    open_index = int(data.get("open_index", 0))
-    key, _ = MENTOR_FEEDBACK_OPEN_QUESTIONS[open_index]
-    open_answers = dict(data.get("open_answers", {}))
-    open_answers[key] = answer
-    next_index = open_index + 1
-    if next_index < len(MENTOR_FEEDBACK_OPEN_QUESTIONS):
-        next_key, next_question = MENTOR_FEEDBACK_OPEN_QUESTIONS[next_index]
-        await state.update_data(
-            open_answers=open_answers,
-            open_index=next_index,
-            current_open_key=next_key,
-        )
-        await message.answer(
-            f"✍️ <b>Развернутый ответ {next_index + 1} из {len(MENTOR_FEEDBACK_OPEN_QUESTIONS)}</b>\n\n"
-            f"{next_question}",
-            parse_mode="HTML",
-        )
-        return
-
-    await state.update_data(open_answers=open_answers)
-    data = await state.get_data()
-    student = get_student_by_telegram(message.from_user.id)
-    ratings = [int(score) for score in data["ratings"]]
-    average = round(sum(ratings) / len(ratings), 2)
-    submitted_at = datetime.now(ALMATY_TIMEZONE).strftime("%d.%m.%Y %H:%M")
-    feedback_id = save_mentor_feedback(
-        student_id=student[0],
-        mentor=data["mentor"],
-        module=data["module"],
-        submitted_at=submitted_at,
-        ratings=ratings,
-        questions=MENTOR_FEEDBACK_QUESTIONS,
-        average=average,
-        open_answers=open_answers,
-    )
-    asyncio.create_task(sync_mentor_feedback(feedback_id))
-    await state.clear()
-    await message.answer(
-        "✅ <b>Спасибо! Отзыв сохранён.</b>\n\n"
-        f"Наставник: {html.escape(data['mentor']['full_name'])}\n"
-        f"Средняя оценка: <b>{average}/5</b>\n\n"
-        "Наставник не увидит ваше имя. Полная запись доступна только администратору.",
-        parse_mode="HTML",
-        reply_markup=student_menu_builder(),
-    )
+    from handlers.assessment import begin
+    await begin(callback, state, 'feedback')
 
 
 @router.message(F.text == "📋 Мои отзывы")
 async def my_mentor_feedback(message: Message):
     records = get_student_feedback(message.from_user.id)
     if not records:
-        await message.answer("📭 Вы ещё не оставляли отзывов о наставниках.")
+        await message.answer("📭 Вы ещё не оставляли отзывов о наставниках.",reply_markup=back_keyboard())
         return
     text = "📋 <b>Мои отправленные отзывы</b>\n\n"
     for record in records[:20]:
@@ -232,4 +152,4 @@ async def my_mentor_feedback(message: Message):
             f"• <b>{html.escape(record['mentor_name'])}</b>\n"
             f"  {html.escape(record['module'])} · {record['average']}/5 · {record['submitted_at']}\n\n"
         )
-    await message.answer(text, parse_mode="HTML")
+    await send_pages(message, text, back_keyboard())
