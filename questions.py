@@ -180,6 +180,8 @@ NEW_OPEN_QUESTIONS = _NEW_FORMS["ct_assembly"]["open_questions"]
 SECTION_TITLES["suitability"] = "Профессиональная пригодность"
 
 def survey_comments(questions, best, improve, recommendation):
-    if any(q.get("form_version") == 2 for q in questions):
-        return list(zip(NEW_OPEN_QUESTIONS, [best, improve]))
+    version = max((q.get("form_version", 1) for q in questions), default=1)
+    if version >= 2:
+        values = [best, improve, recommendation] if version >= 3 or recommendation else [best, improve]
+        return list(zip(NEW_OPEN_QUESTIONS, values))
     return list(zip(OPEN_QUESTIONS, [best, improve, recommendation]))

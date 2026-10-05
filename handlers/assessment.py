@@ -22,7 +22,7 @@ def make_steps(kind, key=None):
     if kind == 'survey':
         questions = get_questions(key)
         steps = [dict(q, type='score') for q in questions if q['section'] != 'suitability']
-        steps += [dict(code=code, text=text, type='text') for code,text in zip(('best','improve'),NEW_OPEN_QUESTIONS)]
+        steps += [dict(code=code, text=text, type='text') for code,text in zip(('best','improve','recommendation'),NEW_OPEN_QUESTIONS)]
         steps += [dict(q, type='score') for q in questions if q['section'] == 'suitability']
     else:
         steps = [dict(q,type='score') for q in MENTOR_FEEDBACK_QUESTIONS]
@@ -48,10 +48,14 @@ async def render(message, state, edit=False, rubric=None):
     rows=[]
     if i == len(steps):
         skipped=sum(value is None for value in answers.values())
-        text=f'✅ <b>Анкета заполнена</b>\nОтветов: {len(answers)} из {len(steps)}.\nНе оценивалось: {skipped}.\n\nМожно вернуться назад и изменить ответы. Нажмите «Сохранить», чтобы отправить анкету.'
+        text=f'✅ <b>Анкета заполнена</b>\nОтветов: {len(answers)} из {len(steps)}.\nКомпетенций без оценки: {skipped}.\n\nМожно вернуться назад и изменить ответы. Нажмите «Сохранить», чтобы отправить анкету.'
         rows.append([button('✅ Сохранить',token,i,'save')])
     else:
         step=steps[i];code=step['code'];section=SECTION_TITLES.get(step.get('section'),'Отзыв о наставнике' if kind=='feedback' else 'Открытый вопрос')
+        if kind == 'survey' and step['type'] == 'text':
+            section = f"Открытый вопрос {('best', 'improve', 'recommendation').index(code) + 1} из 3"
+        elif kind == 'survey' and step.get('section') == 'suitability':
+            section = '4. Профессиональная пригодность'
         text=f'<b>{html.escape(section)}</b> · Вопрос {i+1} из {len(steps)}\n\n<b>{html.escape(step["text"])}</b>\n\n'
         if rubric is not None and step.get('criteria'):
             if rubric == 'criteria':
@@ -67,12 +71,12 @@ async def render(message, state, edit=False, rubric=None):
             if step.get('section')=='suitability':text=text.replace('2 — неудовлетворительно\n3 — удовлетворительно','2 — слабо\n3 — средне')
             rows.append([button(str(n),token,i,f's{n}') for n in range(minimum,6)])
             if kind=='survey' and step.get('section') in ('hard','soft'):
-                rows.append([button('Не оценивалось',token,i,'skip')])
+                rows.append([button('Компетенция не оценивалась',token,i,'skip')])
             if step.get('criteria'):rows.append([button('📖 Критерии оценки',token,i,'criteria')])
         else:
             text+='Введите ответ текстом (до 3000 символов).'
         if code in answers and rubric is None:
-            value=answers[code];label='Не оценивалось' if value is None else str(value)
+            value=answers[code];label='Компетенция не оценивалась' if value is None else str(value)
             text+='\n\nСохранённый ответ: '+html.escape(label[:500])+('…' if len(label)>500 else '')
             rows.append([button('Оставить ответ →',token,i,'keep')])
     if i>0: rows.append([button('← Предыдущий вопрос',token,i,'back')])
@@ -134,12 +138,12 @@ async def commit(callback,state,d):
     if kind=='survey':
         questions=[{k:v for k,v in s.items() if k!='type'} for s in d['wizard_steps'] if s['type']=='score']
         ratings=[a[q['code']] for q in questions];summary=score_summary(questions,ratings)
-        record_id=save_survey(mentor_id=get_mentor_id(callback.from_user.id),student_id=d['student_id'],enterprise=d['enterprise'],answers=ratings,best=a['best'],improve=a['improve'],recommendation='',survey_date=date,questionnaire_key=d['questionnaire_key'],questions=questions,**summary)
+        record_id=save_survey(mentor_id=get_mentor_id(callback.from_user.id),student_id=d['student_id'],enterprise=d['enterprise'],answers=ratings,best=a['best'],improve=a['improve'],recommendation=a['recommendation'],survey_date=date,questionnaire_key=d['questionnaire_key'],questions=questions,**summary)
         asyncio.create_task(sync_survey(record_id));avg=summary['average'];menu=main_menu_builder(callback.from_user.id)
     else:
         student=get_student_by_telegram(callback.from_user.id);ratings=[a[q['code']] for q in MENTOR_FEEDBACK_QUESTIONS];avg=round(sum(ratings)/len(ratings),2)
         record_id=save_mentor_feedback(student_id=student[0],mentor=d['mentor'],module=d['module'],submitted_at=date,ratings=ratings,questions=MENTOR_FEEDBACK_QUESTIONS,average=avg,open_answers={k:a[k] for k,_ in MENTOR_FEEDBACK_OPEN_QUESTIONS})
         asyncio.create_task(sync_mentor_feedback(record_id));menu=student_menu_builder()
     await state.clear()
-    await callback.message.edit_text(f'✅ Анкета №{record_id} сохранена.\nСредний балл: {avg if avg is not None else "Не оценивалось"}.')
+    await callback.message.edit_text(f'✅ Анкета №{record_id} сохранена.\nСредний балл: {avg if avg is not None else "Компетенция не оценивалась"}.')
     await callback.message.answer('Спасибо за участие!',reply_markup=menu)

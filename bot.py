@@ -49,6 +49,9 @@ dp.include_router(specialist_router)
 # ============================
 
 async def main():
+    from database import DATABASE
+    from test_history_cleanup import run_if_requested
+    run_if_requested(DATABASE, "bot")
 
     try:
         sync_reference_data()

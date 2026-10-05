@@ -93,7 +93,7 @@ def export_one_survey(data):
             response.get("code", "-"),
             SECTION_TITLES.get(section, section),
             response.get("text", ""),
-            response["score"] if response["score"] is not None else "Не оценивалось",
+            response["score"] if response["score"] is not None else "Компетенция не оценивалась",
         ])
         row = sheet[sheet.max_row]
         for cell in row:
@@ -102,7 +102,7 @@ def export_one_survey(data):
         row[0].alignment = Alignment(horizontal="center", vertical="center")
         row[1].alignment = Alignment(horizontal="center", vertical="center")
         row[2].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        row[4].alignment = Alignment(horizontal="center", vertical="center")
+        row[4].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         row[4].font = Font(bold=True)
         row[4].fill = PatternFill("solid", fgColor=_score_fill(response["score"]))
         sheet.row_dimensions[sheet.max_row].height = max(34, 15 * ((len(response.get("text", "")) + 65) // 66))
@@ -125,7 +125,7 @@ def export_one_survey(data):
         body.border = BORDER
         sheet.row_dimensions[sheet.max_row].height = min(409, max(48, 15 * ((len(text or "") + 120) // 121)))
 
-    widths = {"A": 10, "B": 18, "C": 24, "D": 82, "E": 16}
+    widths = {"A": 10, "B": 18, "C": 24, "D": 82, "E": 28}
     for column, width in widths.items():
         sheet.column_dimensions[column].width = width
 

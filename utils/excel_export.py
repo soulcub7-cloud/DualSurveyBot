@@ -69,11 +69,11 @@ def export_surveys_to_excel(data):
                 survey["id"], survey["date"], survey["student"], survey["enterprise"],
                 survey["mentor"], survey["questionnaire_title"], response.get("code", "-"),
                 SECTION_TITLES.get(response.get("section"), response.get("section", "-")),
-                response.get("text", ""), response["score"] if response["score"] is not None else "Не оценивалось",
+                response.get("text", ""), response["score"] if response["score"] is not None else "Компетенция не оценивалась",
             ])
     _header(scores)
     _body(scores, centered_columns=(1, 7, 8, 10))
-    _set_widths(scores, [12, 20, 32, 22, 30, 20, 18, 18, 82, 12])
+    _set_widths(scores, [12, 20, 32, 22, 30, 20, 18, 18, 82, 28])
 
     comments = workbook.create_sheet("Комментарии")
     comments.append(["№ анкеты", "Дата", "Студент", "Предприятие", "Наставник", "Вопрос", "Ответ"])

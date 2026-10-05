@@ -415,7 +415,7 @@ async def callback_open_survey(callback: CallbackQuery):
         f"👨‍🏭 <b>Наставник:</b> {survey[1]}\n"
         f"📅 <b>Дата:</b> {survey[2]}\n"
         f"📋 <b>Тип анкеты:</b> {survey[9]}\n"
-        f"⭐ <b>Средний балл:</b> {survey[3] if survey[3] is not None else 'Не оценивалось'}\n"
+        f"⭐ <b>Средний балл:</b> {survey[3] if survey[3] is not None else 'Компетенция не оценивалась'}\n"
         f"🔧 <b>Hard skills:</b> {survey[10] if survey[10] is not None else '-'}\n"
         f"🤝 <b>Soft skills:</b> {survey[11] if survey[11] is not None else '-'}\n"
         f"🎓 <b>Профессиональная пригодность:</b> {survey[12] if survey[12] is not None else '-'}\n\n"

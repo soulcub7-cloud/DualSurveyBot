@@ -59,7 +59,7 @@ def _p(value, style=BODY):
 
 
 def _score_label(score):
-    if score is None: return "Не оценивалось"
+    if score is None: return "Компетенция не оценивалась"
     labels = {1: "1 · не проявляется", 2: "2 · слабо", 3: "3 · удовлетворительно", 4: "4 · хорошо", 5: "5 · отлично"}
     return labels.get(int(score), str(score))
 
@@ -118,7 +118,7 @@ def export_one_pdf(data):
 
     summary_rows = [
         [_p("Общий балл", HEADER), _p("Hard skills", HEADER), _p("Soft skills", HEADER), _p("Профпригодность", HEADER)],
-        [_p((f"{survey['average']:.2f}" if survey["average"] is not None else "Не оценивалось"), BODY_CENTER), _p(survey["hard_average"], BODY_CENTER), _p(survey["soft_average"], BODY_CENTER), _p(survey["suitability_score"], BODY_CENTER)],
+        [_p((f"{survey['average']:.2f}" if survey["average"] is not None else "Компетенция не оценивалась"), BODY_CENTER), _p(survey["hard_average"], BODY_CENTER), _p(survey["soft_average"], BODY_CENTER), _p(survey["suitability_score"], BODY_CENTER)],
     ]
     summary = Table(summary_rows, colWidths=[42.5 * mm] * 4)
     summary.setStyle(TableStyle([
@@ -140,7 +140,7 @@ def export_one_pdf(data):
             _p(response.get("text", "")),
             _p(_score_label(response["score"]), BODY_CENTER),
         ])
-    scores = LongTable(rows, colWidths=[25 * mm, 25 * mm, 97 * mm, 23 * mm], repeatRows=1)
+    scores = LongTable(rows, colWidths=[25 * mm, 25 * mm, 84 * mm, 36 * mm], repeatRows=1)
     score_style = [
         ("BACKGROUND", (0, 0), (-1, 0), DARK),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

@@ -210,7 +210,7 @@ async def my_surveys(message: Message):
 
         keyboard.append([
             InlineKeyboardButton(
-                text=f"{student_name} | ⭐ {avg if avg is not None else 'Не оценивалось'}",
+                text=f"{student_name} | ⭐ {avg if avg is not None else 'Компетенция не оценивалась'}",
                 callback_data=f"survey_{survey_id}"
             )
         ])
@@ -247,7 +247,7 @@ async def open_survey(callback: CallbackQuery):
         f"👥 Поток: {survey[11]}\n"
         f"🏭 Предприятие: {survey[10]}\n"
         f"📅 Дата: {survey[3]}\n"
-        f"⭐ Средний балл: {survey[5] if survey[5] is not None else 'Не оценивалось'}\n"
+        f"⭐ Средний балл: {survey[5] if survey[5] is not None else 'Компетенция не оценивалась'}\n"
         f"🔧 Hard skills: {survey[14] if survey[14] is not None else '-'}\n"
         f"🤝 Soft skills: {survey[15] if survey[15] is not None else '-'}\n"
         f"🎓 Профессиональная пригодность: {survey[16] if survey[16] is not None else '-'}\n\n"
@@ -255,7 +255,7 @@ async def open_survey(callback: CallbackQuery):
     )
 
     for question, mark in zip(questions, answers):
-        text += f"{question.get('text', '—')}: {mark if mark is not None else 'Не оценивалось'}\n"
+        text += f"{question.get('text', '—')}: {mark if mark is not None else 'Компетенция не оценивалась'}\n"
 
     for title, value in survey_comments(questions, survey[6], survey[7], survey[8]):
         text += f"\n{html.escape(title)}\n{html.escape(value or '—')}\n"
@@ -293,7 +293,7 @@ async def my_statistics(message: Message):
 
         f"📝 Заполнено анкет: <b>{stat['count']}</b>\n"
 
-        f"⭐ Средний балл студентов: <b>{stat['average'] if stat['average'] is not None else 'Не оценивалось'}</b>\n"
+        f"⭐ Средний балл студентов: <b>{stat['average'] if stat['average'] is not None else 'Компетенция не оценивалась'}</b>\n"
         f"🔧 Hard skills: <b>{stat['hard_average'] if stat['hard_average'] is not None else '-'}</b>\n"
         f"🤝 Soft skills: <b>{stat['soft_average'] if stat['soft_average'] is not None else '-'}</b>\n"
         f"🎓 Профессиональная пригодность: <b>{stat['suitability_average'] if stat['suitability_average'] is not None else '-'}</b>\n\n"
