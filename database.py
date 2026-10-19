@@ -756,25 +756,14 @@ def get_surveys():
 
     return data
 def delete_survey(survey_id):
+    from survey_deletions import remove
+    remove(DATABASE, 'survey', survey_id)
 
-    conn = get_connection()
 
-    cursor = conn.cursor()
+def delete_mentor_feedback(feedback_id):
+    from survey_deletions import remove
+    remove(DATABASE, 'feedback', feedback_id)
 
-    cursor.execute(
-        """
-        DELETE FROM surveys
-        WHERE id=?
-        """,
-        (survey_id,)
-    )
-
-    conn.commit()
-
-    conn.close()
-    # =====================================================
-# СПИСОК СТУДЕНТОВ СО СТАТИСТИКОЙ
-# =====================================================
 
 def get_students_statistics():
 

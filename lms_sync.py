@@ -158,15 +158,50 @@ async def sync_all_mentor_feedback():
 
 
 async def periodic_lms_sync(interval_seconds=900):
-    """Retry all saved surveys; the LMS ignores duplicates by survey ID."""
+    """Poll deletions each minute; preserve the full-import interval."""
     if not integration_enabled():
         print("LMS: синхронизация отключена — переменные Railway не заданы")
         return
+    next_full_sync = 0
+    loop = asyncio.get_running_loop()
     while True:
-        try:
-            await sync_mentor_reference()
-        except Exception as exc:
-            print(f"LMS: не удалось обновить список наставников: {exc}")
-        await sync_all_surveys()
-        await sync_all_mentor_feedback()
-        await asyncio.sleep(interval_seconds)
+        await sync_deletions()
+        if loop.time() >= next_full_sync:
+            try:
+                await sync_mentor_reference()
+            except Exception as exc:
+                print(f"LMS: не удалось обновить список наставников: {exc}")
+            await sync_all_surveys()
+            await sync_all_mentor_feedback()
+            next_full_sync = loop.time() + interval_seconds
+        await asyncio.sleep(min(60, interval_seconds))
+
+
+def _exchange_deletions(records):
+    req = request.Request(f"{LMS_API_URL}/api/integrations/survey-deletions",
+        data=json.dumps({'deletions': records}).encode('utf-8'),
+        headers={'Authorization': f'Bearer {LMS_BOT_INTEGRATION_TOKEN}', 'Content-Type':'application/json'}, method='POST')
+    with request.urlopen(req, timeout=15) as response:
+        payload = json.load(response)
+    if payload.get('ok') is not True or not isinstance(payload.get('deletions'), list):
+        raise ValueError('Некорректный ответ синхронизации удалений')
+    return payload['deletions']
+
+
+async def sync_deletions():
+    if not integration_enabled():
+        return False
+    from database import DATABASE
+    from survey_deletions import pending, remove
+    try:
+        records = pending(DATABASE)
+        # Bound outgoing request size; keep tombstones for retries and rollback recovery.
+        batches = [records[i:i+500] for i in range(0, len(records), 500)] or [[]]
+        for batch in batches:
+            remote = await asyncio.to_thread(_exchange_deletions, batch)
+            for item in remote:
+                remove(DATABASE, item['kind'], item['external_id'])
+        return True
+    except Exception:
+        print('LMS: удаление ожидает синхронизации; повторная попытка через минуту')
+        return False

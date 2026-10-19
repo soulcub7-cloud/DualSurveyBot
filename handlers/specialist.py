@@ -438,7 +438,7 @@ async def callback_delete(callback: CallbackQuery):
 
     await callback.message.edit_text(
         "⚠️ Вы действительно хотите удалить эту анкету?\n\n"
-        "Это действие нельзя отменить.",
+        "Анкета будет удалена из бота и LMS, показатели пересчитаны. Это действие нельзя отменить.",
         reply_markup=confirm_delete_keyboard(survey_id)
     )
 
@@ -453,10 +453,11 @@ async def callback_confirm_delete(callback: CallbackQuery):
 
     from database import delete_survey, get_surveys
 
-    # Удаляем анкету
     delete_survey(survey_id)
-
-    await callback.answer("Анкета удалена")
+    await callback.answer("Анкета удалена; удаление из LMS поставлено в очередь")
+    from lms_sync import sync_deletions
+    synced = await sync_deletions()
+    await callback.message.answer('Удаление синхронизировано с LMS.' if synced else 'В боте удалено. Удаление из LMS ожидает связи; повтор выполняется автоматически.')
 
     # Получаем обновленный список
     surveys = get_surveys()
@@ -545,3 +546,33 @@ async def stats_menu(callback: CallbackQuery):
 async def exports_menu(callback: CallbackQuery):
     await callback.answer()
     await callback.message.edit_text("📥 Экспорт в Excel",reply_markup=exports_keyboard())
+
+
+@router.callback_query(F.data.regexp(r"^fb_remove_\d+$"))
+async def request_feedback_removal(callback: CallbackQuery):
+    record_id = int(callback.data.rsplit('_', 1)[1])
+    record = get_mentor_feedback(record_id)
+    await callback.answer()
+    if not record:
+        await callback.message.answer('Отзыв уже удалён.', reply_markup=back_keyboard('sp_mentor_feedback', '← К отзывам'))
+        return
+    await callback.message.edit_text(
+        f"Удалить отзыв №{record_id} о наставнике {record['mentor_name']}? "
+        "Он будет удалён из бота и LMS, включая комментарии администрации. Показатели будут пересчитаны. Отменить удаление нельзя.",
+        parse_mode=None,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text='Да, удалить', callback_data=f'fb_confirm_remove_{record_id}')],
+            [InlineKeyboardButton(text='Отмена', callback_data=f'sp_feedback_{record_id}')]]))
+
+
+@router.callback_query(F.data.regexp(r"^fb_confirm_remove_\d+$"))
+async def confirm_feedback_removal(callback: CallbackQuery):
+    from database import delete_mentor_feedback
+    from lms_sync import sync_deletions
+    record_id = int(callback.data.rsplit('_', 1)[1])
+    delete_mentor_feedback(record_id)
+    await callback.answer('Отзыв удалён')
+    synced = await sync_deletions()
+    await callback.message.edit_text(
+        'Отзыв удалён из бота и LMS.' if synced else 'Отзыв удалён из бота. Удаление из LMS ожидает связи и будет повторено автоматически.',
+        reply_markup=back_keyboard('sp_mentor_feedback', '← К отзывам'))

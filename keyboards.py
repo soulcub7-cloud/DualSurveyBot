@@ -322,6 +322,7 @@ def mentor_feedback_view_keyboard(feedback_id):
                 InlineKeyboardButton(text="📄 PDF", callback_data=f"feedback_pdf_{feedback_id}"),
                 InlineKeyboardButton(text="📥 Excel", callback_data=f"feedback_excel_{feedback_id}"),
             ],
+            [InlineKeyboardButton(text="🗑 Удалить отзыв", callback_data=f"fb_remove_{feedback_id}")],
             [InlineKeyboardButton(text="⬅ К отзывам", callback_data="sp_mentor_feedback")],
         ]
     )
